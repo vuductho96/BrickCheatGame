@@ -1,0 +1,13 @@
+<!doctype html>
+<html lang="vi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Xếp Gạch · S23+ Live</title><link rel="stylesheet" href="/style.css"><link rel="stylesheet" href="/live.css"></head>
+<body><div class="app">
+<header><h1>Xếp Gạch <small>LIVE · LOCAL</small></h1><div class="header-actions"><span class="connection" id="connection"><i></i>Đang kết nối S23+</span><select id="auto-mode" aria-label="Chế độ Auto"><option value="fast">Nhanh · 180 ms</option><option value="balanced" selected>Cân bằng · 850 ms</option><option value="deep">Kỹ · 3 giây</option></select><button id="auto-toggle" class="primary" aria-pressed="false">▶ Auto</button><button id="refresh" class="primary">Cập nhật gợi ý</button></div></header>
+<p id="auto-status" class="auto-status" role="status">Auto đang tắt · Chỉ tính khay hiện tại, đợi khay mới rồi tính lại</p>
+<main>
+<section class="live-stage" aria-label="Điều khiển trực tiếp S23+"><div class="live-view"><canvas id="phone" width="540" height="1170" aria-label="Luồng trực tiếp S23+"></canvas><div id="live-offline" class="live-offline">Đang mở luồng trực tiếp…</div></div><p id="live-caption">Nhấn, kéo và thả trực tiếp trên màn hình điện thoại</p></section>
+<aside><section class="hints" aria-label="Gợi ý nước đi"><div class="hint-heading"><h2>Gợi ý nước đi</h2><p id="next-hint">Đang đọc bàn điện thoại…</p></div><div id="plans" class="plans"></div></section>
+<section class="game-stage model-stage" aria-label="Bàn nhận diện từ video"><div class="board-wrap"><div id="board" class="board" role="grid" aria-label="Bàn cờ 8 hàng 8 cột"></div><div id="overlay" class="overlay" hidden><h2 id="overlay-title">Đang đọc bàn cờ</h2><p id="overlay-detail"></p><button id="restart" class="primary" hidden>Tham gia lại</button></div></div><div id="tray" class="tray"></div></section>
+<p id="model-help" class="model-help">Ô viền vàng là vị trí nên đặt. Kéo trên màn hình LIVE bên trái.</p><section id="drop-check" class="hints" hidden aria-label="Đối chiếu lần thả gần nhất"><h2 id="check-title"></h2><div class="check-boards"><div>Dự tính sau xóa hàng<div id="expected-board" class="check-grid"></div></div><div>Đọc từ điện thoại<div id="actual-board" class="check-grid"></div></div></div><p id="check-detail" class="model-help"></p></section><p id="metrics" class="metrics"></p></aside></main>
+<footer><span id="message" role="status" aria-live="polite">Thao tác trên PC được truyền trực tiếp sang S23+</span><span id="busy" hidden>Đang tính gợi ý…</span></footer>
+</div><script type="module" src="/app.js"></script><script type="module" src="/live.js"></script><script type="module" src="/auto.js"></script></body></html>

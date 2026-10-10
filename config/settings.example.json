@@ -1,0 +1,16 @@
+{
+  "size": 8,
+  "adb_path": "adb",
+  "serial": null,
+  "device_identity": null,
+  "board_roi": null,
+  "piece_rois": [],
+  "piece_pitch": 24,
+  "empty_rgb": [35,40,52],
+  "color_tolerance": 40,
+  "beam_width": 100,
+  "time_limit": 0.8,
+  "points_per_cell": 1,
+  "points_per_line": 10,
+  "weights": {"cleared":12,"empty":1,"mobility":0.15,"holes":4,"fragmentation":2}
+}
