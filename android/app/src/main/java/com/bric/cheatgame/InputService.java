@@ -11,10 +11,15 @@ public final class InputService extends AccessibilityService {
     public static volatile InputService instance;
     private final Handler main=new Handler(Looper.getMainLooper());
     private volatile GestureDescription.StrokeDescription held;
+    private volatile String foregroundPackage="";
     private float x,y;
     @Override public void onCreate(){super.onCreate();instance=this;}
     @Override public void onServiceConnected(){instance=this;}
-    @Override public void onAccessibilityEvent(AccessibilityEvent event){instance=this;}
+    @Override public void onAccessibilityEvent(AccessibilityEvent event){
+        instance=this;
+        if(event.getEventType()==AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED&&event.getPackageName()!=null)foregroundPackage=event.getPackageName().toString();
+    }
+    public boolean gameInFront(){return "com.shopee.vn".equals(foregroundPackage);}
     @Override public void onInterrupt(){CaptureService.status="Trợ năng gián đoạn; Auto sẽ đọc lại bàn";}
     @Override public void onDestroy(){if(instance==this){instance=null;held=null;CaptureService.status="Chờ Trợ năng kết nối lại";}super.onDestroy();}
     public boolean pressed(){return held!=null;}

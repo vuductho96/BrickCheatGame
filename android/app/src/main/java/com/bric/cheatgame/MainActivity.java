@@ -28,7 +28,13 @@ public final class MainActivity extends Activity {
             if(CaptureService.running){CaptureService.stopAuto();return;}
             if(CaptureService.instance==null){Toast.makeText(this,"Chia sẻ màn hình trước",Toast.LENGTH_LONG).show();return;}
             if(InputService.instance==null){Toast.makeText(this,"Bật Trợ năng Bric trước",Toast.LENGTH_LONG).show();return;}
-            CaptureService.instance.startAuto();moveTaskToBack(true);
+            // Bring the existing Shopee task forward; sending Bric to the back
+            // can expose the launcher rather than the shared game.
+            Intent game=getPackageManager().getLaunchIntentForPackage("com.shopee.vn");
+            if(game==null){Toast.makeText(this,"Không tìm thấy Shopee trên điện thoại",Toast.LENGTH_LONG).show();return;}
+            game.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            try{startActivity(game);CaptureService.instance.startAuto();}
+            catch(ActivityNotFoundException error){Toast.makeText(this,"Không mở lại được Shopee",Toast.LENGTH_LONG).show();}
         });
         button(layout,"Hiệu chỉnh / xem bàn",this::calibrate);
         button(layout,"Lưu log để sửa lỗi",()->startActivityForResult(new Intent(Intent.ACTION_CREATE_DOCUMENT).setType("application/zip").putExtra(Intent.EXTRA_TITLE,"bric-debug.zip"),11));

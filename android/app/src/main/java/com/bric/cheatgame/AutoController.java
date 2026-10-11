@@ -21,6 +21,7 @@ public final class AutoController {
                 Vision.State state=null;
                 try{
                     if(InputService.instance==null){waitForRecovery("Chờ Trợ năng kết nối lại",2000);continue;}
+                    if(!InputService.instance.gameInFront()){waitForRecovery("Chờ Shopee ở phía trước",2000);continue;}
                     if(InputService.instance.pressed()){waitForRecovery("Chờ cử chỉ cũ kết thúc; chưa kéo khối mới",2000);continue;}
                     CaptureService.waiting=false;
                     loadCalibration();
@@ -117,6 +118,7 @@ public final class AutoController {
     }
     private void place(Vision.State before,Vision.Piece piece,Planner.Move move)throws Exception{
         InputService input=InputService.instance;if(input==null)throw new IllegalStateException("Trợ năng mất kết nối");
+        if(!input.gameInFront())throw new IllegalStateException("Shopee không ở phía trước; chưa kéo");
         Rect b=before.boardRect();float cw=b.width()/8f,ch=b.height()/8f;
         int grip=0;double distance=Double.MAX_VALUE;
         for(int i=0;i<piece.shape().rows.length;i++){double d=Math.pow(piece.shape().rows[i]+.5-piece.shape().height/2d,2)+Math.pow(piece.shape().cols[i]+.5-piece.shape().width/2d,2);if(d<distance){distance=d;grip=i;}}
