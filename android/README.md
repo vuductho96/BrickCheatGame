@@ -5,6 +5,12 @@ quyền root khi sử dụng. Không có quyền INTERNET trong manifest.
 
 ## Cài và chạy
 
+Bản 1.0.1 sửa việc chờ khung mới khi màn hình đứng yên: giữ ảnh gần nhất
+để đọc bàn, nhưng sau thả phải có ảnh mới hơn ảnh trước nhả. Khi kéo,
+đếm khung từ trước lệnh di chuyển; xác nhận đích lần hai dùng dịch một
+pixel để tạo thay đổi. Luồng capture chỉ tìm viền cho hiệu chỉnh mỗi giây.
+Lỗi đọc cụ thể được giữ lại trong trạng thái và log.
+
 1. Cài `BrickCheatGame-debug.apk` (bản thử nghiệm, ký bằng khóa debug).
 2. Mở Bric, bấm **Bật Trợ năng Bric**, bật dịch vụ trong Cài đặt Android.
 3. Bấm **Chia sẻ toàn bộ màn hình** và xác nhận trong hộp thoại hệ thống.
@@ -13,6 +19,11 @@ quyền root khi sử dụng. Không có quyền INTERNET trong manifest.
    Bric lùi xuống nền; cần để bàn game ở phía trước trong vòng 10 giây.
 5. Dừng bằng nút trong thông báo hoặc quay lại Bric. Nếu đổi hướng hoặc
    độ phân giải, tắt chụp màn hình rồi cấp lại phiên mới.
+
+Có thể mở game rồi chọn **Chạy Auto** trong thông báo Bric. Cách này
+không cần đưa Bric ra trước bàn game. Android 14 trở lên được yêu cầu
+capture toàn màn hình, tránh chỉ thu cửa sổ Bric. Cập nhật APK hoặc
+dừng phiên capture sẽ cần xác nhận chia sẻ màn hình lại.
 
 Hiệu chỉnh tùy chọn: sau khi mở bàn vài giây, quay lại Bric, chọn
 **Hiệu chỉnh / xem bàn**. Chạm hai góc bên trong bàn, không bao gồm viền.

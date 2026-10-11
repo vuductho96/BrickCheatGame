@@ -11,7 +11,8 @@ import java.util.*;
 public final class AutoController {
     private final CaptureService service;private final Planner planner=new Planner();
     private final ArrayList<Shape[]> history=new ArrayList<>();
-    private int moves;private Rect calibrated;private String lastRefill="";
+    private int moves;private Rect calibrated;private String lastRefill="",readError="Chưa có ảnh";
+    private long releaseSequence=-1;
     public AutoController(CaptureService service){this.service=service;loadHistory();}
     public void run(){
         try{
@@ -24,7 +25,7 @@ public final class AutoController {
                 Thread.sleep(300);
             }
             while(CaptureService.running){
-                Vision.State state=stable(3500);if(state==null){CaptureService.status="Không đọc được bàn; Auto dừng. Xem log hoặc hiệu chỉnh.";log("unreadable",null,null,null);break;}
+                Vision.State state=stable(6000);if(state==null){CaptureService.status="Không đọc được bàn: "+readError;log("unreadable",null,null,null);break;}
                 observeRefill(state);
                 Shape[] shapes=state.pieces().stream().map(Vision.Piece::shape).toArray(Shape[]::new);
                 if(shapes.length==0){CaptureService.status="Không có khối trong khay; Auto dừng";break;}
@@ -41,7 +42,7 @@ public final class AutoController {
                     log("planned",state,move,null);
                     CaptureService.status="Khối "+(piece.slot()+1)+" → hàng "+(move.row()+1)+", cột "+(move.col()+1)+" · "+moves+" nước đúng";
                     place(state,piece,move);
-                    Vision.State actual=stable(3500);
+                    Vision.State actual=stable(6000);
                     if(actual==null||actual.board()!=move.expected()||!remainingMatches(state,actual,piece.slot())){
                         log("mismatch",state,move,actual);saveFrame("mismatch.png");throw new IllegalStateException("Sau thả khác dự tính; dừng để bảo vệ bàn");
                     }
@@ -55,11 +56,16 @@ public final class AutoController {
     private Vision.State stable(long timeout)throws Exception{
         long end=SystemClock.elapsedRealtime()+timeout;String previous="";Vision.State latest=null;int same=0;
         while(SystemClock.elapsedRealtime()<end){
-            long sequence=service.sequence();try(BitmapHandle h=new BitmapHandle(service.nextFrame(sequence,600))){
+            // MediaProjection may emit no new buffer for an unchanged screen.
+            // After a release require at least one image newer than the pre-UP image.
+            long sequence=service.sequence();
+            Bitmap frame=sequence>releaseSequence?service.frame():service.nextFrame(releaseSequence,600);
+            try(BitmapHandle h=new BitmapHandle(frame)){
                 if(h.bitmap==null)continue;
                 try{Vision.State read=Vision.read(h.bitmap,calibrated);String signature=read.signature();same=signature.equals(previous)?same+1:1;previous=signature;latest=read;if(same>=3)return latest;}
-                catch(IllegalArgumentException ignored){same=0;previous="";}
+                catch(IllegalArgumentException error){readError=error.getMessage();same=0;previous="";}
             }
+            Thread.sleep(180);
         }
         return null;
     }
@@ -76,19 +82,23 @@ public final class AutoController {
         float sy=piece.bounds().top+(piece.shape().rows[grip]+.5f)*piece.bounds().height()/piece.shape().height;
         float px=b.centerX(),py=b.bottom-ch*.25f;boolean released=false;
         try(BitmapHandle baseline=new BitmapHandle(service.frame())){
-            input.down(sx,sy);input.move(px,py,250);
+            input.down(sx,sy);long requestedSequence=service.sequence();input.move(px,py,250);
             float targetX=b.left+move.col()*cw,targetY=b.top+move.row()*ch;
             int matches=0;
             for(int attempt=0;attempt<18;attempt++){
                 if(!CaptureService.running)throw new IllegalStateException("Bạn đã dừng");
-                long sequence=service.sequence();try(BitmapHandle fresh=new BitmapHandle(service.nextFrame(sequence,650))){
+                try(BitmapHandle fresh=new BitmapHandle(service.nextFrame(requestedSequence,1800))){
                     if(fresh.bitmap==null)throw new IllegalStateException("Không có khung mới khi kéo");
+                    requestedSequence=service.sequence();
                     PointF location=locate(fresh.bitmap,baseline.bitmap,b,piece,targetX,targetY);
                     if(location==null)throw new IllegalStateException("Không thấy toàn bộ hình đang kéo");
                     float dx=targetX-location.x,dy=targetY-location.y;
                     if(Math.abs(dx)<cw*.07&&Math.abs(dy)<ch*.07){
-                        if(++matches>=2){input.up();released=true;return;}
-                        Thread.sleep(100);continue;
+                        if(++matches>=2){releaseSequence=service.sequence();input.up();released=true;return;}
+                        // Request a changed screen for the second confirmation;
+                        // one pixel remains well inside the alignment tolerance.
+                        float nudge=px<fresh.bitmap.getWidth()-3?1:-1;
+                        input.move(px+nudge,py,100);px+=nudge;continue;
                     }
                     matches=0;float nextX=px+Math.max(-cw,Math.min(cw,dx))*.7f,nextY=py+Math.max(-ch,Math.min(ch,dy))*.7f;
                     nextX=Math.max(2,Math.min(fresh.bitmap.getWidth()-2,nextX));nextY=Math.max(2,Math.min(fresh.bitmap.getHeight()-2,nextY));

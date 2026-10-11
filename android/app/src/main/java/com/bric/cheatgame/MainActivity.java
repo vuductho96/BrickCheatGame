@@ -5,6 +5,7 @@ import android.app.*;
 import android.content.*;
 import android.graphics.*;
 import android.media.projection.MediaProjectionManager;
+import android.media.projection.MediaProjectionConfig;
 import android.os.*;
 import android.provider.Settings;
 import android.view.*;
@@ -26,7 +27,9 @@ public final class MainActivity extends Activity {
         button(layout,"2. Chia sẻ toàn bộ màn hình",()->{
             if(CaptureService.instance!=null){Toast.makeText(this,"Đã nhận màn hình",Toast.LENGTH_SHORT).show();return;}
             if(Build.VERSION.SDK_INT>=33)requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS},9);
-            startActivityForResult(getSystemService(MediaProjectionManager.class).createScreenCaptureIntent(),10);
+            MediaProjectionManager manager=getSystemService(MediaProjectionManager.class);
+            Intent request=Build.VERSION.SDK_INT>=34?manager.createScreenCaptureIntent(MediaProjectionConfig.createConfigForDefaultDisplay()):manager.createScreenCaptureIntent();
+            startActivityForResult(request,10);
         });
         auto=button(layout,"Chạy Auto trên điện thoại",()->{
             if(CaptureService.running){CaptureService.stopAuto();return;}
