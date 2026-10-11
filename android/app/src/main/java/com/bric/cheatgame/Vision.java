@@ -30,18 +30,30 @@ public final class Vision {
         return best;
     }
     public static State read(Bitmap frame,Rect calibrated){
-        Rect detected=findBoard(frame);Rect board=calibrated==null?detected:calibrated;
+        Rect detected=findBoard(frame);Rect board=calibrated==null||Math.abs(calibrated.width()-calibrated.height())>frame.getWidth()*.01?detected:calibrated;
         if(Math.abs(board.left-detected.left)>frame.getWidth()*.04||Math.abs(board.top-detected.top)>frame.getHeight()*.04)
             throw new IllegalArgumentException("Bàn khác hiệu chỉnh; cần căn lại");
         long occupied=readBoard(frame,board);
         ArrayList<Piece> pieces=new ArrayList<>();
-        int start=board.bottom+Math.round(board.height()*.0225f),end=Math.min(frame.getHeight()-1,board.bottom+Math.round(board.height()*.35f));
+        int start=board.bottom+Math.round(board.height()*.0225f),end=trayBottom(frame,board,start);
         for(int slot=0;slot<3;slot++){
             int left=board.left+slot*board.width()/3,right=board.left+(slot+1)*board.width()/3;
             Piece piece=readPiece(frame,new Rect(left,start,right,end),slot,58f*frame.getWidth()/1080f);
             if(piece!=null)pieces.add(piece);
         }
         return new State(occupied,List.copyOf(pieces),board,System.currentTimeMillis());
+    }
+    private static int trayBottom(Bitmap frame,Rect board,int start){
+        int fallback=Math.min(frame.getHeight()-1,board.bottom+Math.round(board.height()*.35f));
+        // The bottom blue/grey frame spans the tray. Ignore the bright,
+        // saturated pieces and stop before the support buttons below it.
+        for(int y=board.bottom+Math.round(board.height()*.15f);y<=fallback;y++){
+            int hit=0,total=0;
+            for(int x=board.left;x<board.right;x+=4){float[] hsv=HSV.get();Color.colorToHSV(frame.getPixel(x,y),hsv);total++;
+                if(hsv[0]>190&&hsv[0]<240&&hsv[1]>.15&&hsv[1]<.8&&hsv[2]>.25&&hsv[2]<.85)hit++;}
+            if(hit>total*.85)return Math.max(start+1,y-2);
+        }
+        return fallback;
     }
     public static long readBoard(Bitmap frame,Rect board){
         long occupied=0;

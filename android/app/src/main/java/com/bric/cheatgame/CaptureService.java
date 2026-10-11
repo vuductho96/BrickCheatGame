@@ -28,6 +28,7 @@ public final class CaptureService extends Service {
     @Override public IBinder onBind(Intent intent){return null;}
     @Override public int onStartCommand(Intent intent,int flags,int id){
         if(intent==null)return START_NOT_STICKY;
+        if("DEBUG".equals(intent.getAction())){synchronized(frames){if(latest!=null)try(java.io.FileOutputStream out=openFileOutput("capture-debug.png",0)){latest.compress(Bitmap.CompressFormat.PNG,100,out);}catch(java.io.IOException ignored){}}return START_NOT_STICKY;}
         if("START".equals(intent.getAction())){if(instance==this)startAuto();else status="Chia sẻ màn hình trước";return START_NOT_STICKY;}
         if("STOP".equals(intent.getAction())){stopAuto();return START_NOT_STICKY;}
         if("CLOSE".equals(intent.getAction())){stopSelf();return START_NOT_STICKY;}
@@ -82,7 +83,7 @@ public final class CaptureService extends Service {
     }
     public static void stopAuto(){running=false;status="Đang dừng Auto";}
     @Override public void onDestroy(){
-        stopAuto();instance=null;if(autoThread!=null)try{autoThread.join(1800);}catch(InterruptedException ignored){Thread.currentThread().interrupt();}
+        if(instance==this){stopAuto();instance=null;}if(autoThread!=null)try{autoThread.join(1800);}catch(InterruptedException ignored){Thread.currentThread().interrupt();}
         if(display!=null)display.release();if(reader!=null)reader.close();if(projection!=null)projection.stop();if(captureThread!=null)captureThread.quitSafely();
         synchronized(frames){if(latest!=null){latest.recycle();latest=null;}if(lastGame!=null){lastGame.recycle();lastGame=null;}}
         status=closeReason;super.onDestroy();

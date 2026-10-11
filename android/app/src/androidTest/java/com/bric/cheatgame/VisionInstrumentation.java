@@ -9,9 +9,11 @@ import java.io.*;
 /** Runs actual Android Bitmap/HSV code on the phone without touching the game. */
 public final class VisionInstrumentation extends Instrumentation {
     private boolean synthetic;
-    @Override public void onCreate(Bundle args){super.onCreate(args);synthetic=args!=null&&"true".equals(args.getString("synthetic"));start();}
+    private String diagnostic;
+    @Override public void onCreate(Bundle args){super.onCreate(args);synthetic=args!=null&&"true".equals(args.getString("synthetic"));diagnostic=args==null?null:args.getString("frame");start();}
     @Override public void onStart(){Bundle result=new Bundle();int passed=0;
         try{
+            if(diagnostic!=null){Bitmap image=BitmapFactory.decodeStream(getContext().getAssets().open(diagnostic));try{Vision.State read=Vision.read(image,null);result.putString("stream","Diagnostic: "+read.signature()+" board="+read.boardRect()+"\n");finish(-1,result);return;}finally{image.recycle();}}
             JSONArray fixtures=new JSONArray(new String(getContext().getAssets().open("fixtures/cases.json").readAllBytes(),java.nio.charset.StandardCharsets.UTF_8));
             for(int i=0;i<fixtures.length();i++){
                 JSONObject item=fixtures.getJSONObject(i);Bitmap frame;

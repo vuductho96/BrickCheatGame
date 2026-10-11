@@ -12,10 +12,11 @@ public final class InputService extends AccessibilityService {
     private final Handler main=new Handler(Looper.getMainLooper());
     private GestureDescription.StrokeDescription held;
     private float x,y;
+    @Override public void onCreate(){super.onCreate();instance=this;}
     @Override public void onServiceConnected(){instance=this;}
-    @Override public void onAccessibilityEvent(AccessibilityEvent event){}
+    @Override public void onAccessibilityEvent(AccessibilityEvent event){instance=this;}
     @Override public void onInterrupt(){CaptureService.stopAuto();}
-    @Override public void onDestroy(){instance=null;CaptureService.stopAuto();super.onDestroy();}
+    @Override public void onDestroy(){if(instance==this){instance=null;CaptureService.stopAuto();}super.onDestroy();}
     public boolean pressed(){return held!=null;}
     public void down(float sx,float sy)throws Exception{if(held!=null)throw new IllegalStateException("Finger already down");send(sx,sy,100,true,true);}
     public void move(float sx,float sy,long duration)throws Exception{if(held==null)throw new IllegalStateException("No finger");send(sx,sy,duration,true,false);}

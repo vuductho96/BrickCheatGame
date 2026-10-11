@@ -5,6 +5,16 @@ quyền root khi sử dụng. Không có quyền INTERNET trong manifest.
 
 ## Cài và chạy
 
+Bản 1.0.3 phục hồi tham chiếu dịch vụ Trợ năng theo vòng đời Android,
+không để dịch vụ cũ xóa trạng thái của dịch vụ mới. Hiệu chỉnh không
+vuông được bỏ qua để dùng viền bàn tự tìm. Chưa có lượt kéo thật xác
+minh thành công cho các bản sửa này; cần đối chiếu log khi dùng Auto.
+
+Bản 1.0.2 tìm viền dưới khay để không lấy nút hỗ trợ vào hình khối,
+lưu `error.png` khi nhận dạng thất bại. Đã đọc được bàn và ba hình trong
+ảnh ván thật đang mở, cùng hai fixture tổng hợp; vẫn cần kiểm tra kéo
+trực tiếp để kết luận Auto hoạt động.
+
 Bản 1.0.1 sửa việc chờ khung mới khi màn hình đứng yên: giữ ảnh gần nhất
 để đọc bàn, nhưng sau thả phải có ảnh mới hơn ảnh trước nhả. Khi kéo,
 đếm khung từ trước lệnh di chuyển; xác nhận đích lần hai dùng dịch một

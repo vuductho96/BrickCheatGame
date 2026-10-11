@@ -25,7 +25,7 @@ public final class AutoController {
                 Thread.sleep(300);
             }
             while(CaptureService.running){
-                Vision.State state=stable(6000);if(state==null){CaptureService.status="Không đọc được bàn: "+readError;log("unreadable",null,null,null);break;}
+                Vision.State state=stable(6000);if(state==null){CaptureService.status="Không đọc được bàn: "+readError;log("unreadable",null,null,null);saveFrame("error.png");break;}
                 observeRefill(state);
                 Shape[] shapes=state.pieces().stream().map(Vision.Piece::shape).toArray(Shape[]::new);
                 if(shapes.length==0){CaptureService.status="Không có khối trong khay; Auto dừng";break;}
