@@ -14,6 +14,13 @@ public final class Planner {
     private final HashSet<Key> failed=new HashSet<>();
     public interface FirstMove { boolean allowed(int slot,int row,int col); }
     private FirstMove firstMove=(slot,row,col)->true;
+    private SearchEffort effort=SearchEffort.NORMAL;
+
+    public Plan solve(long board,Shape[] shapes,SearchEffort effort,List<Shape[]> history,Streak streak,FirstMove allowed){
+        this.effort=Objects.requireNonNull(effort);
+        try { return solve(board,shapes,effort.width(),effort.budgetMs(),history,streak,allowed); }
+        finally { this.effort=SearchEffort.NORMAL; }
+    }
 
     public Plan solve(long board,Shape[] shapes,int width,long budgetMs,List<Shape[]> history,Streak streak){
         return solve(board,shapes,width,budgetMs,history,streak,(slot,row,col)->true);
@@ -92,12 +99,12 @@ public final class Planner {
         }
         ArrayList<Node> complete=new ArrayList<>();for(Node n:beam)if(n.left==0)complete.add(n);
         if(complete.isEmpty())return new Plan(best.path,best.path.size(),best.lines,best.board,limited,0);
-        if(complete.size()>16)complete=new ArrayList<>(complete.subList(0,16));
+        if(complete.size()>effort.candidates())complete=new ArrayList<>(complete.subList(0,effort.candidates()));
         double[] rank=new double[complete.size()],depthSum=new double[complete.size()];int[] worst=new int[complete.size()];Arrays.fill(worst,6);
         for(int i=0;i<rank.length;i++)rank[i]=complete.get(i).value+Board.flexibility(complete.get(i).board);
         Random random=new Random(board^Arrays.stream(shapes).map(s->s.key).reduce("",String::concat).hashCode());
         int sampled=0;
-        for(int sample=0;sample<16&&!expired();sample++){
+        for(int sample=0;sample<effort.scenarios()&&!expired();sample++){
             Shape[][] future={draw(random,history),draw(random,history)};
             int[] depths=new int[complete.size()];boolean finished=true;
             for(int i=0;i<complete.size();i++){
@@ -120,7 +127,7 @@ public final class Planner {
     private boolean expired(){return Thread.currentThread().isInterrupted()||System.nanoTime()>=deadline;}
     private boolean dfs(Node n){
         if(n.left==0){witness=n;return true;}
-        if(expired()||nodes++>=50000){limited=true;return false;}
+        if(expired()||nodes++>=effort.dfsNodes()){limited=true;return false;}
         Key key=new Key(n.board,n.left);if(failed.contains(key))return false;
         for(int i=0;i<anchors.length;i++)if((n.left&(1<<i))!=0)for(Shape.Anchor a:anchors[i]){
             if((n.board&a.mask())!=0)continue;
@@ -142,7 +149,7 @@ public final class Planner {
             }
             if(next.isEmpty()||expired())break;
             beam=new ArrayList<>(next.values());beam.sort(Comparator.comparingDouble(Node::value).reversed());
-            if(beam.size()>6)beam=beam.subList(0,6);best=beam.get(0);
+            if(beam.size()>effort.rolloutWidth())beam=beam.subList(0,effort.rolloutWidth());best=beam.get(0);
         }
         return best;
     }

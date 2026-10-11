@@ -22,6 +22,8 @@ public final class AutoController {
     private long streakBoard;
     private boolean streakAwaitingRefill;
     private int lastCleared;
+    private SearchEffort searchEffort=SearchEffort.NORMAL;
+    private int sampledScenarios;
     public AutoController(CaptureService service){this.service=service;loadHistory();}
     private final RecoveryPolicy recovery=new RecoveryPolicy();
     public void run(){
@@ -51,10 +53,13 @@ public final class AutoController {
                     observeRefill(state);
                     Shape[] shapes=state.pieces().stream().map(Vision.Piece::shape).toArray(Shape[]::new);
                     if(shapes.length==0){waitForRecovery("Chờ khay mới hoặc bàn game",2000);continue;}
-                    CaptureService.status="Đang tính "+shapes.length+" khối · "+moves+" nước đúng · "+streakStatus();
+                    searchEffort=SearchEffort.choose(state.board(),shapes);sampledScenarios=0;
+                    CaptureService.status="Đang tính "+shapes.length+" khối · còn "+(64-Long.bitCount(state.board()))+" ô trống · tối đa "+searchEffort.budgetMs()/1000f+" s · "+streakStatus();
+                    log("planning_started",state,null,null);
                     final int[] slots=originalSlots.clone();
-                    Planner.Plan plan=planner.solve(state.board(),shapes,160,1500,history,streak,
+                    Planner.Plan plan=planner.solve(state.board(),shapes,searchEffort,history,streak,
                         (slot,row,col)->executionFailures.allowed(ExecutionFailures.action(slots[slot],shapes[slot].key,row,col)));
+                    sampledScenarios=plan.scenarios();log("planning_finished",state,null,null);
                     if(plan.moves().isEmpty()){recover("Không có nước hợp lệ; chờ bàn thay đổi",state,"no_move");continue;}
                     for(Planner.Move move:plan.moves()){
                         if(!CaptureService.running)break;
@@ -278,6 +283,7 @@ public final class AutoController {
     private void log(String event,Vision.State before,Planner.Move move,Vision.State actual){
         try{JSONObject record=new JSONObject().put("time",System.currentTimeMillis()).put("event",event).put("status",CaptureService.status);
             record.put("streakObservedLines",streak.lines()).put("streakMisses",streak.misses());
+            record.put("searchLevel",searchEffort.level()).put("searchBudgetMs",searchEffort.budgetMs()).put("searchWidth",searchEffort.width()).put("sampledScenarios",sampledScenarios);
             if(event.equals("verified"))record.put("clearedLines",lastCleared);
             if(before!=null)record.put("before",before.signature());if(actual!=null)record.put("actual",actual.signature());if(move!=null)record.put("row",move.row()).put("col",move.col()).put("expected",Long.toUnsignedString(move.expected()));
             if(pending!=null)record.put("physicalSlot",pending.piece().slot()).put("shape",pending.piece().shape().key).put("dragStrategy",pending.strategy()).put("action",pending.action());
