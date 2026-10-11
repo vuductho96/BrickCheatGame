@@ -5,6 +5,23 @@ import java.util.*;
 import static org.junit.Assert.*;
 
 public final class PlannerTest {
+    @Test public void failedFirstMoveStaysExcludedAfterStreakReordering() {
+        Shape s=shape(new int[][]{{0,0}});Shape[] tray={s,s,s};
+        Planner.Plan p=new Planner().solve(0,tray,80,1500,List.of(),new Streak(4,2),
+            (slot,row,col)->slot==2&&row==7&&col==7);
+        assertEquals(3,p.placed());assertEquals(2,p.moves().get(0).slot());
+        assertEquals(7,p.moves().get(0).row());assertEquals(7,p.moves().get(0).col());
+    }
+    @Test public void allFailedActionsReturnNoGestureAndDoNotLeakToNextSearch() {
+        Planner planner=new Planner();Shape[] tray={shape(new int[][]{{0,0}})};
+        assertTrue(planner.solve(0,tray,20,200,List.of(),Streak.EMPTY,(slot,row,col)->false).moves().isEmpty());
+        assertEquals(1,planner.solve(0,tray,20,200,List.of()).placed());
+    }
+    @Test public void failureFilterOnlyAppliesToFirstPhysicalMove() {
+        Shape[] tray={shape(new int[][]{{0,0}}),shape(new int[][]{{0,0}})};
+        Planner.Plan p=new Planner().solve(0,tray,40,500,List.of(),Streak.EMPTY,(slot,row,col)->slot==1);
+        assertEquals(2,p.placed());assertEquals(1,p.moves().get(0).slot());assertEquals(0,p.moves().get(1).slot());
+    }
     private Shape shape(int[][] cells){return new Shape(cells);}
     @Test public void simultaneousClearsIncludeHighBit(){long b=255L|(0x0101010101010101L<<7);Board.Cleared c=Board.clear(b);assertEquals(2,c.lines());assertEquals(0,c.board());}
     @Test public void unfamiliarShapesAreNotWhitelisted(){Shape s=shape(new int[][]{{3,2},{4,4},{5,3},{5,5},{6,2},{6,5}});assertEquals(4,s.height);assertEquals(4,s.width);assertEquals(6,Long.bitCount(s.mask(0,0)));}

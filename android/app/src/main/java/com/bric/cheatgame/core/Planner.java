@@ -12,22 +12,34 @@ public final class Planner {
     private List<Shape.Anchor>[] anchors;
     private Node witness;
     private final HashSet<Key> failed=new HashSet<>();
+    public interface FirstMove { boolean allowed(int slot,int row,int col); }
+    private FirstMove firstMove=(slot,row,col)->true;
 
     public Plan solve(long board,Shape[] shapes,int width,long budgetMs,List<Shape[]> history,Streak streak){
-        Plan baseline=solve(board,shapes,width,budgetMs,history);
-        return reorderForStreak(board,shapes,baseline,Objects.requireNonNull(streak));
+        return solve(board,shapes,width,budgetMs,history,streak,(slot,row,col)->true);
+    }
+    public Plan solve(long board,Shape[] shapes,int width,long budgetMs,List<Shape[]> history,Streak streak,FirstMove allowed){
+        firstMove=Objects.requireNonNull(allowed);
+        try {
+            Plan baseline=search(board,shapes,width,budgetMs,history);
+            return reorderForStreak(board,shapes,baseline,Objects.requireNonNull(streak),allowed);
+        } finally { firstMove=(slot,row,col)->true; }
     }
     /** Optimize clear timing without changing the baseline's end-of-tray board. */
     public static Plan reorderForStreak(long board,Shape[] shapes,Plan baseline,Streak streak){
+        return reorderForStreak(board,shapes,baseline,streak,(slot,row,col)->true);
+    }
+    private static Plan reorderForStreak(long board,Shape[] shapes,Plan baseline,Streak streak,FirstMove allowed){
         if(baseline.placed()!=shapes.length||baseline.moves().size()>3)return baseline;
-        OrderSearch search=new OrderSearch(shapes,baseline);
+        OrderSearch search=new OrderSearch(shapes,baseline,allowed);
         search.visit(board,streak,0,0,0,new ArrayList<>());
         return search.best==null?baseline:new Plan(List.copyOf(search.best),baseline.placed(),search.lines,baseline.finalBoard(),baseline.limited(),baseline.scenarios());
     }
     private static final class OrderSearch {
         final Shape[] shapes;final Plan baseline;
+        final FirstMove allowed;
         List<Move> best;double score=-Double.MAX_VALUE;int lines;
-        OrderSearch(Shape[] shapes,Plan baseline){this.shapes=shapes;this.baseline=baseline;}
+        OrderSearch(Shape[] shapes,Plan baseline,FirstMove allowed){this.shapes=shapes;this.baseline=baseline;this.allowed=allowed;}
         void visit(long board,Streak streak,int used,int cleared,double priority,ArrayList<Move> path){
             if(path.size()==baseline.moves().size()){
                 priority-=streak.lines()>0?streak.misses()*2:0;
@@ -36,6 +48,7 @@ public final class Planner {
             }
             for(int i=0;i<baseline.moves().size();i++)if((used&(1<<i))==0){
                 Move original=baseline.moves().get(i);long mask=shapes[original.slot()].mask(original.row(),original.col());
+                if(path.isEmpty()&&!allowed.allowed(original.slot(),original.row(),original.col()))continue;
                 if((mask&board)!=0)continue;
                 Board.Cleared next=Board.clear(board|mask);
                 path.add(new Move(original.slot(),original.row(),original.col(),next.board()));
@@ -46,6 +59,10 @@ public final class Planner {
     }
 
     public Plan solve(long board,Shape[] shapes,int width,long budgetMs,List<Shape[]> history){
+        firstMove=(slot,row,col)->true;
+        return search(board,shapes,width,budgetMs,history);
+    }
+    private Plan search(long board,Shape[] shapes,int width,long budgetMs,List<Shape[]> history){
         deadline=System.nanoTime()+budgetMs*1_000_000L;limited=false;nodes=0;failed.clear();witness=null;
         anchors=new List[shapes.length];for(int i=0;i<shapes.length;i++)anchors[i]=shapes[i].anchors();
         Node root=new Node(board,(1<<shapes.length)-1,0,List.of(),Board.cheap(board,0));
@@ -54,6 +71,7 @@ public final class Planner {
             HashMap<Key,Node> next=new HashMap<>();
             outer:for(Node n:beam)for(int i=0;i<shapes.length;i++)if((n.left&(1<<i))!=0)for(Shape.Anchor a:anchors[i]){
                 if((a.mask()&n.board)!=0)continue;
+                if(n.path.isEmpty()&&!firstMove.allowed(i,a.row(),a.col()))continue;
                 if(expired()){limited=true;break outer;}
                 Board.Cleared clear=Board.clear(n.board|a.mask());int lines=n.lines+clear.lines();
                 ArrayList<Move> path=new ArrayList<>(n.path);path.add(new Move(i,a.row(),a.col(),clear.board()));
@@ -106,6 +124,7 @@ public final class Planner {
         Key key=new Key(n.board,n.left);if(failed.contains(key))return false;
         for(int i=0;i<anchors.length;i++)if((n.left&(1<<i))!=0)for(Shape.Anchor a:anchors[i]){
             if((n.board&a.mask())!=0)continue;
+            if(n.path.isEmpty()&&!firstMove.allowed(i,a.row(),a.col()))continue;
             Board.Cleared c=Board.clear(n.board|a.mask());ArrayList<Move> path=new ArrayList<>(n.path);path.add(new Move(i,a.row(),a.col(),c.board()));
             if(dfs(new Node(c.board(),n.left^(1<<i),n.lines+c.lines(),path,0)))return true;
             if(limited)return false;

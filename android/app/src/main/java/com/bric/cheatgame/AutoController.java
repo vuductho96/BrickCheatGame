@@ -13,6 +13,10 @@ public final class AutoController {
     private final ArrayList<Shape[]> history=new ArrayList<>();
     private int moves;private Rect calibrated;private String lastRefill="",readError="Chưa có ảnh";
     private long releaseSequence=-1;
+    // Preserve failed actions when the user toggles Auto in the same app session.
+    private static final ExecutionFailures executionFailures=new ExecutionFailures();
+    private record Pending(Vision.State before,Vision.Piece piece,Planner.Move move,String action,int strategy) {}
+    private Pending pending;
     private Streak streak=Streak.EMPTY;
     private String streakSignature="";
     private long streakBoard;
@@ -33,13 +37,24 @@ public final class AutoController {
                     state=stable(6000);
                     if(!CaptureService.running)break;
                     if(state==null){recover("Đợi đọc lại bàn: "+readError,null,"unreadable");continue;}
+                    // Never issue another gesture while the previous result is unknown.
+                    if(pending!=null){
+                        if(state.signature().equals(pending.before().signature())){
+                            executionFailures.observe(state.signature());executionFailures.failed(pending.action());
+                            log("rejected_action",pending.before(),pending.move(),state);
+                        }else log("changed_after_attempt",pending.before(),pending.move(),state);
+                        pending=null;releaseSequence=-1;
+                    }
+                    executionFailures.observe(state.signature());
                     recovery.observe(state.signature());
                     syncStreak(state);
                     observeRefill(state);
                     Shape[] shapes=state.pieces().stream().map(Vision.Piece::shape).toArray(Shape[]::new);
                     if(shapes.length==0){waitForRecovery("Chờ khay mới hoặc bàn game",2000);continue;}
                     CaptureService.status="Đang tính "+shapes.length+" khối · "+moves+" nước đúng · "+streakStatus();
-                    Planner.Plan plan=planner.solve(state.board(),shapes,160,1500,history,streak);
+                    final int[] slots=originalSlots.clone();
+                    Planner.Plan plan=planner.solve(state.board(),shapes,160,1500,history,streak,
+                        (slot,row,col)->executionFailures.allowed(ExecutionFailures.action(slots[slot],shapes[slot].key,row,col)));
                     if(plan.moves().isEmpty()){recover("Không có nước hợp lệ; chờ bàn thay đổi",state,"no_move");continue;}
                     for(Planner.Move move:plan.moves()){
                         if(!CaptureService.running)break;
@@ -69,6 +84,7 @@ public final class AutoController {
                         streak=streak.after(lastCleared);
                         streakSignature=actual.signature();streakBoard=actual.board();streakAwaitingRefill=actual.pieces().isEmpty();saveStreak();
                         log("verified",state,move,actual);moves++;recovery.verified();state=actual;
+                        pending=null;executionFailures.observe(actual.signature());releaseSequence=-1;
                     }
                 }catch(InterruptedException interrupted){Thread.currentThread().interrupt();break;}
                 catch(Exception error){
@@ -104,7 +120,7 @@ public final class AutoController {
         long delay=recovery.failed(state==null?null:state.signature());
         CaptureService.status="Auto chờ: "+reason;log(event,state,null,null);
         // Returned/cancelled gestures may not produce a buffer on a static screen.
-        releaseSequence=-1;
+        if(pending==null)releaseSequence=-1;
         waitForRecovery(reason,delay);
     }
     private void waitForRecovery(String reason,long delay)throws InterruptedException{
@@ -141,12 +157,18 @@ public final class AutoController {
         InputService input=InputService.instance;if(input==null)throw new IllegalStateException("Trợ năng mất kết nối");
         if(!input.gameInFront())throw new IllegalStateException("Shopee không ở phía trước; chưa kéo");
         Rect b=before.boardRect();float cw=b.width()/8f,ch=b.height()/8f;
-        int grip=0;double distance=Double.MAX_VALUE;
-        for(int i=0;i<piece.shape().rows.length;i++){double d=Math.pow(piece.shape().rows[i]+.5-piece.shape().height/2d,2)+Math.pow(piece.shape().cols[i]+.5-piece.shape().width/2d,2);if(d<distance){distance=d;grip=i;}}
+        String action=ExecutionFailures.action(piece.slot(),piece.shape().key,move.row(),move.col());
+        executionFailures.observe(before.signature());int strategy=executionFailures.strategy(action);
+        if(!executionFailures.allowed(action))throw new IllegalStateException("Đã loại thao tác thất bại; tính lại");
+        Integer[] grips=new Integer[piece.shape().rows.length];for(int i=0;i<grips.length;i++)grips[i]=i;
+        Arrays.sort(grips,Comparator.comparingDouble(i->Math.pow(piece.shape().rows[i]+.5-piece.shape().height/2d,2)+Math.pow(piece.shape().cols[i]+.5-piece.shape().width/2d,2)));
+        int grip=grips[strategy%grips.length];
         float sx=piece.bounds().left+(piece.shape().cols[grip]+.5f)*piece.bounds().width()/piece.shape().width;
         float sy=piece.bounds().top+(piece.shape().rows[grip]+.5f)*piece.bounds().height()/piece.shape().height;
-        float px=b.centerX(),py=b.centerY()+ch*.5f;boolean released=false;
+        float px=b.centerX()+(strategy==1?-cw:strategy==2?cw:0),py=b.centerY()+ch*(strategy==2?-.5f:.5f);boolean released=false;
         try(BitmapHandle baseline=new BitmapHandle(service.frame())){
+            pending=new Pending(before,piece,move,action,strategy);
+            log("attempt_started",before,move,null);
             input.down(sx,sy);long requestedSequence=service.sequence();input.move(px,py,250);
             float targetX=b.left+move.col()*cw,targetY=b.top+move.row()*ch;
             int matches=0;
@@ -175,7 +197,7 @@ public final class AutoController {
             }
             throw new IllegalStateException("Căn không thành công; trả khối về khay");
         }finally{
-            if(!released&&input.pressed()){try{input.move(sx,sy,250);input.up();}catch(Exception ignored){CaptureService.status="Android đã hủy kéo";}}
+            if(!released&&input.pressed()){try{input.move(sx,sy,250);releaseSequence=service.sequence();input.up();}catch(Exception ignored){CaptureService.status="Android đã hủy kéo";}}
         }
     }
     /** The grey snapped footprint is the game's placement, not the lifted sprite. */
@@ -258,6 +280,7 @@ public final class AutoController {
             record.put("streakObservedLines",streak.lines()).put("streakMisses",streak.misses());
             if(event.equals("verified"))record.put("clearedLines",lastCleared);
             if(before!=null)record.put("before",before.signature());if(actual!=null)record.put("actual",actual.signature());if(move!=null)record.put("row",move.row()).put("col",move.col()).put("expected",Long.toUnsignedString(move.expected()));
+            if(pending!=null)record.put("physicalSlot",pending.piece().slot()).put("shape",pending.piece().shape().key).put("dragStrategy",pending.strategy()).put("action",pending.action());
             try(FileWriter writer=new FileWriter(new File(service.getFilesDir(),"moves.jsonl"),true)){writer.write(record+"\n");}
         }catch(Exception ignored){}
     }
