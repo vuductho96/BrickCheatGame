@@ -24,6 +24,8 @@ public final class AutoController {
     private int lastCleared;
     private SearchEffort searchEffort=SearchEffort.NORMAL;
     private int sampledScenarios;
+    private MotionTiming dragTiming=MotionTiming.NORMAL;
+    private MotionTiming requestedTiming(){return service.getSharedPreferences("bric",0).getBoolean("fast_gestures",true)?MotionTiming.FAST:MotionTiming.NORMAL;}
     public AutoController(CaptureService service){this.service=service;loadHistory();}
     private final RecoveryPolicy recovery=new RecoveryPolicy();
     public void run(){
@@ -150,7 +152,8 @@ public final class AutoController {
                 try{long started=SystemClock.elapsedRealtime();Vision.State read=Vision.read(h.bitmap,calibrated);String signature=read.signature();same=signature.equals(previous)?same+1:1;previous=signature;latest=read;readError="Bàn chưa ổn định: "+same+"/3 · đọc "+(SystemClock.elapsedRealtime()-started)+" ms";if(same>=3)return latest;}
                 catch(IllegalArgumentException error){readError=error.getMessage();same=0;previous="";}
             }
-            Thread.sleep(180);
+            // Keep full settling time after release; only pre-drag polling is faster.
+            Thread.sleep(releaseSequence>=0?180:requestedTiming().duration(180));
         }
         return null;
     }
@@ -165,6 +168,8 @@ public final class AutoController {
         String action=ExecutionFailures.action(piece.slot(),piece.shape().key,move.row(),move.col());
         executionFailures.observe(before.signature());int strategy=executionFailures.strategy(action);
         if(!executionFailures.allowed(action))throw new IllegalStateException("Đã loại thao tác thất bại; tính lại");
+        // A failed fast attempt retries at normal speed with its changed pickup.
+        dragTiming=strategy==0?requestedTiming():MotionTiming.NORMAL;input.setTiming(dragTiming);
         Integer[] grips=new Integer[piece.shape().rows.length];for(int i=0;i<grips.length;i++)grips[i]=i;
         Arrays.sort(grips,Comparator.comparingDouble(i->Math.pow(piece.shape().rows[i]+.5-piece.shape().height/2d,2)+Math.pow(piece.shape().cols[i]+.5-piece.shape().width/2d,2)));
         int grip=grips[strategy%grips.length];
@@ -202,7 +207,7 @@ public final class AutoController {
             }
             throw new IllegalStateException("Căn không thành công; trả khối về khay");
         }finally{
-            if(!released&&input.pressed()){try{input.move(sx,sy,250);releaseSequence=service.sequence();input.up();}catch(Exception ignored){CaptureService.status="Android đã hủy kéo";}}
+            if(!released&&input.pressed()){try{input.setTiming(MotionTiming.NORMAL);input.move(sx,sy,250);releaseSequence=service.sequence();input.up();}catch(Exception ignored){CaptureService.status="Android đã hủy kéo";}}
         }
     }
     /** The grey snapped footprint is the game's placement, not the lifted sprite. */
@@ -284,6 +289,7 @@ public final class AutoController {
         try{JSONObject record=new JSONObject().put("time",System.currentTimeMillis()).put("event",event).put("status",CaptureService.status);
             record.put("streakObservedLines",streak.lines()).put("streakMisses",streak.misses());
             record.put("searchLevel",searchEffort.level()).put("searchBudgetMs",searchEffort.budgetMs()).put("searchWidth",searchEffort.width()).put("sampledScenarios",sampledScenarios);
+            record.put("gestureSpeed",dragTiming.multiplier());
             if(event.equals("verified"))record.put("clearedLines",lastCleared);
             if(before!=null)record.put("before",before.signature());if(actual!=null)record.put("actual",actual.signature());if(move!=null)record.put("row",move.row()).put("col",move.col()).put("expected",Long.toUnsignedString(move.expected()));
             if(pending!=null)record.put("physicalSlot",pending.piece().slot()).put("shape",pending.piece().shape().key).put("dragStrategy",pending.strategy()).put("action",pending.action());

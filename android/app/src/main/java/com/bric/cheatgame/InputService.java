@@ -5,6 +5,7 @@ import android.graphics.Path;
 import android.os.*;
 import android.view.accessibility.AccessibilityEvent;
 import java.util.concurrent.*;
+import com.bric.cheatgame.core.MotionTiming;
 
 /** Continued strokes permit feedback while the finger remains down. */
 public final class InputService extends AccessibilityService {
@@ -13,6 +14,8 @@ public final class InputService extends AccessibilityService {
     private volatile GestureDescription.StrokeDescription held;
     private volatile String foregroundPackage="";
     private float x,y;
+    private MotionTiming timing=MotionTiming.NORMAL;
+    public void setTiming(MotionTiming timing){this.timing=timing;}
     @Override public void onCreate(){super.onCreate();instance=this;}
     @Override public void onServiceConnected(){instance=this;}
     @Override public void onAccessibilityEvent(AccessibilityEvent event){
@@ -23,9 +26,9 @@ public final class InputService extends AccessibilityService {
     @Override public void onInterrupt(){CaptureService.status="Trợ năng gián đoạn; Auto sẽ đọc lại bàn";}
     @Override public void onDestroy(){if(instance==this){instance=null;held=null;CaptureService.status="Chờ Trợ năng kết nối lại";}super.onDestroy();}
     public boolean pressed(){return held!=null;}
-    public void down(float sx,float sy)throws Exception{if(held!=null)throw new IllegalStateException("Finger already down");send(sx,sy,100,true,true);}
-    public void move(float sx,float sy,long duration)throws Exception{if(held==null)throw new IllegalStateException("No finger");send(sx,sy,duration,true,false);Thread.sleep(220);}
-    public void up()throws Exception{if(held!=null)send(x,y,60,false,false);}
+    public void down(float sx,float sy)throws Exception{if(held!=null)throw new IllegalStateException("Finger already down");send(sx,sy,timing.duration(100),true,true);}
+    public void move(float sx,float sy,long duration)throws Exception{if(held==null)throw new IllegalStateException("No finger");send(sx,sy,timing.duration(duration),true,false);Thread.sleep(timing.duration(220));}
+    public void up()throws Exception{if(held!=null)send(x,y,timing.duration(60),false,false);}
     private void send(float sx,float sy,long duration,boolean continuing,boolean first)throws Exception{
         CountDownLatch complete=new CountDownLatch(1);boolean[] success={false};
         main.post(()->{

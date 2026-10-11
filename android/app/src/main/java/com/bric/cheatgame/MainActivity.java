@@ -24,6 +24,10 @@ public final class MainActivity extends Activity {
         status=text("",16);status.setPadding(0,dp(20),0,dp(20));layout.addView(status);
         button(layout,"1. Bật Trợ năng Bric",()->startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)));
         button(layout,"2. Chia sẻ ứng dụng / màn hình",this::requestCapture);
+        Button speed=button(layout,"",()->{});
+        Runnable speedLabel=()->speed.setText(getSharedPreferences("bric",0).getBoolean("fast_gestures",true)?"Tốc độ kéo: 2× · chạm để đổi":"Tốc độ kéo: 1× · chạm để đổi");
+        speed.setOnClickListener(v->{boolean fast=getSharedPreferences("bric",0).getBoolean("fast_gestures",true);getSharedPreferences("bric",0).edit().putBoolean("fast_gestures",!fast).apply();speedLabel.run();});
+        speedLabel.run();
         auto=button(layout,"Chạy Auto trên điện thoại",()->{
             if(CaptureService.running){CaptureService.stopAuto();return;}
             if(CaptureService.instance==null){Toast.makeText(this,"Chia sẻ màn hình trước",Toast.LENGTH_LONG).show();return;}
