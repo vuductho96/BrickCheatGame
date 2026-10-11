@@ -13,6 +13,11 @@ public final class AutoController {
     private final ArrayList<Shape[]> history=new ArrayList<>();
     private int moves;private Rect calibrated;private String lastRefill="",readError="Chưa có ảnh";
     private long releaseSequence=-1;
+    private Streak streak=Streak.EMPTY;
+    private String streakSignature="";
+    private long streakBoard;
+    private boolean streakAwaitingRefill;
+    private int lastCleared;
     public AutoController(CaptureService service){this.service=service;loadHistory();}
     private final RecoveryPolicy recovery=new RecoveryPolicy();
     public void run(){
@@ -29,11 +34,12 @@ public final class AutoController {
                     if(!CaptureService.running)break;
                     if(state==null){recover("Đợi đọc lại bàn: "+readError,null,"unreadable");continue;}
                     recovery.observe(state.signature());
+                    syncStreak(state);
                     observeRefill(state);
                     Shape[] shapes=state.pieces().stream().map(Vision.Piece::shape).toArray(Shape[]::new);
                     if(shapes.length==0){waitForRecovery("Chờ khay mới hoặc bàn game",2000);continue;}
-                    CaptureService.status="Đang tính "+shapes.length+" khối · "+moves+" nước đúng";
-                    Planner.Plan plan=planner.solve(state.board(),shapes,160,1500,history);
+                    CaptureService.status="Đang tính "+shapes.length+" khối · "+moves+" nước đúng · "+streakStatus();
+                    Planner.Plan plan=planner.solve(state.board(),shapes,160,1500,history,streak);
                     if(plan.moves().isEmpty()){recover("Không có nước hợp lệ; chờ bàn thay đổi",state,"no_move");continue;}
                     for(Planner.Move move:plan.moves()){
                         if(!CaptureService.running)break;
@@ -50,7 +56,7 @@ public final class AutoController {
                         }
                         piece=current.pieces().stream().filter(p->p.slot()==wantedSlot).findFirst().orElseThrow();
                         log("planned",state,move,null);
-                        CaptureService.status="Khối "+(piece.slot()+1)+" → hàng "+(move.row()+1)+", cột "+(move.col()+1)+" · "+moves+" nước đúng";
+                        CaptureService.status="Khối "+(piece.slot()+1)+" → hàng "+(move.row()+1)+", cột "+(move.col()+1)+" · "+moves+" nước đúng · "+streakStatus();
                         place(current,piece,move);
                         Vision.State actual=stable(6000);
                         if(!CaptureService.running)break;
@@ -59,6 +65,9 @@ public final class AutoController {
                             // A failed prediction invalidates every remaining move in this plan.
                             state=actual;throw new IllegalStateException("Sau thả khác dự tính; đọc lại và tính lại");
                         }
+                        lastCleared=Board.clear(state.board()|mask).lines();
+                        streak=streak.after(lastCleared);
+                        streakSignature=actual.signature();streakBoard=actual.board();streakAwaitingRefill=actual.pieces().isEmpty();saveStreak();
                         log("verified",state,move,actual);moves++;recovery.verified();state=actual;
                     }
                 }catch(InterruptedException interrupted){Thread.currentThread().interrupt();break;}
@@ -70,6 +79,18 @@ public final class AutoController {
         }catch(InterruptedException interrupted){Thread.currentThread().interrupt();}
         finally{CaptureService.running=false;CaptureService.waiting=false;}
     }
+    private String streakStatus(){return "chuỗi quan sát "+streak.lines()+" hàng/cột · "+streak.misses()+"/3 nước chưa xóa";}
+    private void syncStreak(Vision.State state){
+        String signature=state.signature();if(signature.equals(streakSignature))return;
+        android.content.SharedPreferences prefs=service.getSharedPreferences("bric",0);
+        boolean refill=state.pieces().size()==3&&prefs.getBoolean("streak_waiting_refill",false)&&state.board()==prefs.getLong("streak_board",0);
+        if(signature.equals(prefs.getString("streak_signature",""))||refill){
+            try{streak=new Streak(prefs.getInt("streak_lines",0),prefs.getInt("streak_misses",0));}
+            catch(IllegalArgumentException ignored){streak=Streak.EMPTY;}
+        }else{streak=Streak.EMPTY;log("streak_resync",state,null,null);}
+        streakSignature=signature;streakBoard=state.board();streakAwaitingRefill=state.pieces().isEmpty();saveStreak();
+    }
+    private void saveStreak(){service.getSharedPreferences("bric",0).edit().putString("streak_signature",streakSignature).putInt("streak_lines",streak.lines()).putInt("streak_misses",streak.misses()).putLong("streak_board",streakBoard).putBoolean("streak_waiting_refill",streakAwaitingRefill).apply();}
     private void loadCalibration(){
         String top=service.getSharedPreferences("bric",0).getString("calibration","");
         if(top.isEmpty()){calibrated=null;return;}
@@ -234,6 +255,8 @@ public final class AutoController {
     private void saveHistory(){JSONArray all=new JSONArray();for(Shape[] tray:history){JSONArray shapes=new JSONArray();for(Shape s:tray){JSONArray cells=new JSONArray();for(int[] p:s.cells())cells.put(new JSONArray().put(p[0]).put(p[1]));shapes.put(cells);}all.put(shapes);}service.getSharedPreferences("bric",0).edit().putString("trays",all.toString()).apply();}
     private void log(String event,Vision.State before,Planner.Move move,Vision.State actual){
         try{JSONObject record=new JSONObject().put("time",System.currentTimeMillis()).put("event",event).put("status",CaptureService.status);
+            record.put("streakObservedLines",streak.lines()).put("streakMisses",streak.misses());
+            if(event.equals("verified"))record.put("clearedLines",lastCleared);
             if(before!=null)record.put("before",before.signature());if(actual!=null)record.put("actual",actual.signature());if(move!=null)record.put("row",move.row()).put("col",move.col()).put("expected",Long.toUnsignedString(move.expected()));
             try(FileWriter writer=new FileWriter(new File(service.getFilesDir(),"moves.jsonl"),true)){writer.write(record+"\n");}
         }catch(Exception ignored){}

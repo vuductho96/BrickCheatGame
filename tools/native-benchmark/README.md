@@ -6,6 +6,10 @@ Run from the repository root using JDK 17:
 ./tools/native-benchmark/run.ps1 -JavaHome $env:JAVA_HOME -Seeds 12 -Start 1000 -Trays 90 -BudgetMs 100 -Output native-benchmark.csv
 ```
 
+Pass `-Mode streak` to compare the three-missed-placement streak objective. The additional CSV columns report clearing placements, streak breaks and maximum streak lines. They are observed simulated metrics, not Shopee points.
+
+Use `-Mode order` for the final strategy's stronger paired check: one baseline search per tray, with both orders required to leave the same board and no fewer cleared lines. This avoids comparing two independently timed searches.
+
 Each seed produces one complete tray stream before either solver plays. Both variants see the same stream, have the same search budget, and may use only previously observed trays as history. Their execution order alternates. Every returned move is replayed and checked for collisions and reused slots.
 
 `Legacy*` files snapshot this project's native 1.0.11 solver, not a third-party implementation. The comparison uses 80-wide search; the app uses 160-wide search and a 1500 ms budget. Three synthetic distributions cover common shapes, a transition to harder shapes, and unfamiliar shapes from the start. They do not reproduce Shopee's generator, scoring, difficulty thresholds or Android gesture behavior.

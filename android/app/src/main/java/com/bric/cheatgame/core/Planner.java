@@ -13,6 +13,38 @@ public final class Planner {
     private Node witness;
     private final HashSet<Key> failed=new HashSet<>();
 
+    public Plan solve(long board,Shape[] shapes,int width,long budgetMs,List<Shape[]> history,Streak streak){
+        Plan baseline=solve(board,shapes,width,budgetMs,history);
+        return reorderForStreak(board,shapes,baseline,Objects.requireNonNull(streak));
+    }
+    /** Optimize clear timing without changing the baseline's end-of-tray board. */
+    public static Plan reorderForStreak(long board,Shape[] shapes,Plan baseline,Streak streak){
+        if(baseline.placed()!=shapes.length||baseline.moves().size()>3)return baseline;
+        OrderSearch search=new OrderSearch(shapes,baseline);
+        search.visit(board,streak,0,0,0,new ArrayList<>());
+        return search.best==null?baseline:new Plan(List.copyOf(search.best),baseline.placed(),search.lines,baseline.finalBoard(),baseline.limited(),baseline.scenarios());
+    }
+    private static final class OrderSearch {
+        final Shape[] shapes;final Plan baseline;
+        List<Move> best;double score=-Double.MAX_VALUE;int lines;
+        OrderSearch(Shape[] shapes,Plan baseline){this.shapes=shapes;this.baseline=baseline;}
+        void visit(long board,Streak streak,int used,int cleared,double priority,ArrayList<Move> path){
+            if(path.size()==baseline.moves().size()){
+                priority-=streak.lines()>0?streak.misses()*2:0;
+                if(board==baseline.finalBoard()&&cleared>=baseline.lines()&&priority>score){best=new ArrayList<>(path);score=priority;lines=cleared;}
+                return;
+            }
+            for(int i=0;i<baseline.moves().size();i++)if((used&(1<<i))==0){
+                Move original=baseline.moves().get(i);long mask=shapes[original.slot()].mask(original.row(),original.col());
+                if((mask&board)!=0)continue;
+                Board.Cleared next=Board.clear(board|mask);
+                path.add(new Move(original.slot(),original.row(),original.col(),next.board()));
+                visit(next.board(),streak.after(next.lines()),used|(1<<i),cleared+next.lines(),priority+streak.priority(next.lines()),path);
+                path.remove(path.size()-1);
+            }
+        }
+    }
+
     public Plan solve(long board,Shape[] shapes,int width,long budgetMs,List<Shape[]> history){
         deadline=System.nanoTime()+budgetMs*1_000_000L;limited=false;nodes=0;failed.clear();witness=null;
         anchors=new List[shapes.length];for(int i=0;i<shapes.length;i++)anchors[i]=shapes[i].anchors();
