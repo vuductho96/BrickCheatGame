@@ -7,6 +7,7 @@ public final class Shape {
     public final int[] rows,cols;
     public final int height,width;
     public final String key;
+    private List<Anchor> cachedAnchors;
     public Shape(int[][] cells) {
         if(cells.length==0)throw new IllegalArgumentException("Empty shape");
         int r0=99,c0=99;
@@ -22,7 +23,7 @@ public final class Shape {
         height=h;width=w;key=k.toString();
     }
     public long mask(int row,int col){long m=0;for(int i=0;i<rows.length;i++)m|=1L<<((row+rows[i])*8+col+cols[i]);return m;}
-    public List<Anchor> anchors(){ArrayList<Anchor> a=new ArrayList<>();for(int r=0;r<=8-height;r++)for(int c=0;c<=8-width;c++)a.add(new Anchor(r,c,mask(r,c)));return a;}
+    public List<Anchor> anchors(){if(cachedAnchors==null){ArrayList<Anchor> a=new ArrayList<>();for(int r=0;r<=8-height;r++)for(int c=0;c<=8-width;c++)a.add(new Anchor(r,c,mask(r,c)));cachedAnchors=List.copyOf(a);}return cachedAnchors;}
     public record Anchor(int row,int col,long mask) {}
     public int[][] cells(){int[][] p=new int[rows.length][2];for(int i=0;i<rows.length;i++){p[i][0]=rows[i];p[i][1]=cols[i];}return p;}
 }

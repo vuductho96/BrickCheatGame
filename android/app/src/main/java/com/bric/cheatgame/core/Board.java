@@ -2,6 +2,13 @@ package com.bric.cheatgame.core;
 
 public final class Board {
     private Board() {}
+    private static final long[][] VALID=new long[9][9];
+    static {for(int h=1;h<=8;h++)for(int w=1;w<=8;w++)for(int r=0;r<=8-h;r++)VALID[h][w]|=((1L<<(9-w))-1)<<(r*8);}
+    public static int rectangles(long board,int h,int w){
+        long free=~board,horizontal=free;for(int c=1;c<w;c++)horizontal&=free>>>c;
+        long fit=horizontal;for(int r=1;r<h;r++)fit&=horizontal>>>(r*8);
+        return Long.bitCount(fit&VALID[h][w]);
+    }
     public record Cleared(long board,int lines) {}
     public static Cleared clear(long b){
         long remove=0;int lines=0;
@@ -17,9 +24,7 @@ public final class Board {
     public static double flexibility(long b){
         double total=0;int maxArea=0;
         for(int h=1;h<=8;h++)for(int w=1;w<=8;w++){
-            int count=0;long row=(1L<<w)-1,rect=0;
-            for(int r=0;r<h;r++)rect|=row<<(r*8);
-            for(int r=0;r<=8-h;r++)for(int c=0;c<=8-w;c++)if((b&(rect<<(r*8+c)))==0)count++;
+            int count=rectangles(b,h,w);
             if(count>0)maxArea=Math.max(maxArea,h*w);
             total+=Math.log1p(count)*Math.sqrt(h*w);
         }

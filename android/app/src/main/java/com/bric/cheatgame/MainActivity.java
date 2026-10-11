@@ -15,7 +15,7 @@ import java.util.zip.*;
 
 public final class MainActivity extends Activity {
     private final Handler handler=new Handler();private TextView status;private Button auto;
-    private final Runnable refresh=new Runnable(){public void run(){status.setText((InputService.instance!=null?"Trợ năng: đã bật":"Trợ năng: chưa bật")+"\n"+CaptureService.status);auto.setText(CaptureService.running?"Dừng Auto":"Chạy Auto trên điện thoại");handler.postDelayed(this,500);}};
+    private final Runnable refresh=new Runnable(){public void run(){status.setText((InputService.instance!=null?"Trợ năng: đã bật":"Trợ năng: chưa bật")+"\n"+CaptureService.status);auto.setText(CaptureService.running?(CaptureService.waiting?"Dừng Auto (đang chờ)":"Dừng Auto"):"Chạy Auto trên điện thoại");handler.postDelayed(this,500);}};
     @Override public void onCreate(Bundle state){
         super.onCreate(state);getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         LinearLayout layout=new LinearLayout(this);layout.setOrientation(LinearLayout.VERTICAL);layout.setPadding(dp(24),dp(32),dp(24),dp(20));layout.setBackgroundColor(Color.rgb(243,248,249));

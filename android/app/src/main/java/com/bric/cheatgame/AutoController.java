@@ -14,48 +14,90 @@ public final class AutoController {
     private int moves;private Rect calibrated;private String lastRefill="",readError="Chưa có ảnh";
     private long releaseSequence=-1;
     public AutoController(CaptureService service){this.service=service;loadHistory();}
+    private final RecoveryPolicy recovery=new RecoveryPolicy();
     public void run(){
         try{
-            long deadline=SystemClock.elapsedRealtime()+10000;
-            while(CaptureService.running&&SystemClock.elapsedRealtime()<deadline){
-                String top=service.getSharedPreferences("bric",0).getString("calibration","");
-                if(!top.isEmpty()){String[] v=top.split(",");Bitmap f=service.frame();if(f!=null){calibrated=new Rect(Math.round(Float.parseFloat(v[0])*f.getWidth()),Math.round(Float.parseFloat(v[1])*f.getHeight()),Math.round(Float.parseFloat(v[2])*f.getWidth()),Math.round(Float.parseFloat(v[3])*f.getHeight()));f.recycle();}}
-                try(BitmapHandle handle=new BitmapHandle(service.frame())){if(handle.bitmap!=null){Vision.read(handle.bitmap,calibrated);break;}}
-                catch(Exception ignored){CaptureService.status="Mở bàn game trong 10 giây…";}
-                Thread.sleep(300);
-            }
-            while(CaptureService.running){
-                Vision.State state=stable(6000);if(state==null){CaptureService.status="Không đọc được bàn: "+readError;log("unreadable",null,null,null);saveFrame("error.png");break;}
-                observeRefill(state);
-                Shape[] shapes=state.pieces().stream().map(Vision.Piece::shape).toArray(Shape[]::new);
-                if(shapes.length==0){CaptureService.status="Không có khối trong khay; Auto dừng";break;}
-                CaptureService.status="Đang tính "+shapes.length+" khối · "+moves+" nước đúng";
-                Planner.Plan plan=planner.solve(state.board(),shapes,160,1500,history);
-                if(plan.moves().isEmpty()){CaptureService.status="Không tìm được nước hợp lệ";log("no_move",state,null,null);break;}
-                // The full current-tray path is kept while each observed state agrees.
-                for(Planner.Move move:plan.moves()){
+            while(CaptureService.running&&CaptureService.instance==service){
+                Vision.State state=null;
+                try{
+                    if(InputService.instance==null){waitForRecovery("Chờ Trợ năng kết nối lại",2000);continue;}
+                    if(InputService.instance.pressed()){waitForRecovery("Chờ cử chỉ cũ kết thúc; chưa kéo khối mới",2000);continue;}
+                    CaptureService.waiting=false;
+                    loadCalibration();
+                    state=stable(6000);
                     if(!CaptureService.running)break;
-                    int wantedSlot=originalSlots[move.slot()];
-                    Vision.Piece piece=state.pieces().stream().filter(p->p.slot()==wantedSlot).findFirst().orElse(null);
-                    if(piece==null)throw new IllegalStateException("Khay đã đổi; cần tính lại");
-                    long mask=piece.shape().mask(move.row(),move.col());if((mask&state.board())!=0)throw new IllegalStateException("Ô đích đã bị chiếm");
-                    log("planned",state,move,null);
-                    CaptureService.status="Khối "+(piece.slot()+1)+" → hàng "+(move.row()+1)+", cột "+(move.col()+1)+" · "+moves+" nước đúng";
-                    place(state,piece,move);
-                    Vision.State actual=stable(6000);
-                    if(actual==null||actual.board()!=move.expected()||!remainingMatches(state,actual,piece.slot())){
-                        log("mismatch",state,move,actual);saveFrame("mismatch.png");throw new IllegalStateException("Sau thả khác dự tính; dừng để bảo vệ bàn");
+                    if(state==null){recover("Đợi đọc lại bàn: "+readError,null,"unreadable");continue;}
+                    recovery.observe(state.signature());
+                    observeRefill(state);
+                    Shape[] shapes=state.pieces().stream().map(Vision.Piece::shape).toArray(Shape[]::new);
+                    if(shapes.length==0){waitForRecovery("Chờ khay mới hoặc bàn game",2000);continue;}
+                    CaptureService.status="Đang tính "+shapes.length+" khối · "+moves+" nước đúng";
+                    Planner.Plan plan=planner.solve(state.board(),shapes,160,1500,history);
+                    if(plan.moves().isEmpty()){recover("Không có nước hợp lệ; chờ bàn thay đổi",state,"no_move");continue;}
+                    for(Planner.Move move:plan.moves()){
+                        if(!CaptureService.running)break;
+                        int wantedSlot=originalSlots[move.slot()];
+                        Vision.Piece piece=state.pieces().stream().filter(p->p.slot()==wantedSlot).findFirst().orElse(null);
+                        if(piece==null)throw new IllegalStateException("Khay đã đổi; cần tính lại");
+                        long mask=piece.shape().mask(move.row(),move.col());
+                        if((mask&state.board())!=0)throw new IllegalStateException("Ô đích đã bị chiếm");
+                        // Planning takes time: reject stale board/tray before touching the phone.
+                        Vision.State current=stable(3000);
+                        if(!CaptureService.running)break;
+                        if(current==null||!current.signature().equals(state.signature())){
+                            state=current;throw new IllegalStateException("Bàn đổi trước khi kéo; tính lại");
+                        }
+                        piece=current.pieces().stream().filter(p->p.slot()==wantedSlot).findFirst().orElseThrow();
+                        log("planned",state,move,null);
+                        CaptureService.status="Khối "+(piece.slot()+1)+" → hàng "+(move.row()+1)+", cột "+(move.col()+1)+" · "+moves+" nước đúng";
+                        place(current,piece,move);
+                        Vision.State actual=stable(6000);
+                        if(!CaptureService.running)break;
+                        if(actual==null||actual.board()!=move.expected()||!remainingMatches(state,actual,piece.slot())){
+                            log("mismatch",state,move,actual);saveFrame("mismatch.png");
+                            // A failed prediction invalidates every remaining move in this plan.
+                            state=actual;throw new IllegalStateException("Sau thả khác dự tính; đọc lại và tính lại");
+                        }
+                        log("verified",state,move,actual);moves++;recovery.verified();state=actual;
                     }
-                    log("verified",state,move,actual);moves++;state=actual;
+                }catch(InterruptedException interrupted){Thread.currentThread().interrupt();break;}
+                catch(Exception error){
+                    if(!CaptureService.running||CaptureService.instance!=service)break;
+                    saveFrame("error.png");recover(error.getMessage(),state,"retry");
                 }
             }
-        }catch(Exception error){CaptureService.status="Auto dừng: "+error.getMessage();log("error",null,null,null);saveFrame("error.png");}
-        finally{CaptureService.running=false;}
+        }catch(InterruptedException interrupted){Thread.currentThread().interrupt();}
+        finally{CaptureService.running=false;CaptureService.waiting=false;}
+    }
+    private void loadCalibration(){
+        String top=service.getSharedPreferences("bric",0).getString("calibration","");
+        if(top.isEmpty()){calibrated=null;return;}
+        String[] v=top.split(",");
+        try(BitmapHandle handle=new BitmapHandle(service.frame())){
+            Bitmap f=handle.bitmap;if(f==null)return;
+            calibrated=new Rect(Math.round(Float.parseFloat(v[0])*f.getWidth()),Math.round(Float.parseFloat(v[1])*f.getHeight()),Math.round(Float.parseFloat(v[2])*f.getWidth()),Math.round(Float.parseFloat(v[3])*f.getHeight()));
+        }
+    }
+    private void recover(String reason,Vision.State state,String event)throws InterruptedException{
+        long delay=recovery.failed(state==null?null:state.signature());
+        CaptureService.status="Auto chờ: "+reason;log(event,state,null,null);
+        // Returned/cancelled gestures may not produce a buffer on a static screen.
+        releaseSequence=-1;
+        waitForRecovery(reason,delay);
+    }
+    private void waitForRecovery(String reason,long delay)throws InterruptedException{
+        CaptureService.waiting=true;
+        long end=SystemClock.elapsedRealtime()+delay;
+        while(CaptureService.running&&CaptureService.instance==service&&SystemClock.elapsedRealtime()<end){
+            CaptureService.status="Auto đang chờ · "+reason+" · thử lại sau "+Math.max(1,(end-SystemClock.elapsedRealtime()+999)/1000)+" s";
+            Thread.sleep(Math.min(200,Math.max(1,end-SystemClock.elapsedRealtime())));
+        }
+        CaptureService.waiting=false;
     }
     private int[] originalSlots=new int[0];
     private Vision.State stable(long timeout)throws Exception{
         long end=SystemClock.elapsedRealtime()+timeout;String previous="";Vision.State latest=null;int same=0;
-        while(SystemClock.elapsedRealtime()<end){
+        while(CaptureService.running&&CaptureService.instance==service&&SystemClock.elapsedRealtime()<end){
             // MediaProjection may emit no new buffer for an unchanged screen.
             // After a release require at least one image newer than the pre-UP image.
             long sequence=service.sequence();

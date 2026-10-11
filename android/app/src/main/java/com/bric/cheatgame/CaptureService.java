@@ -19,6 +19,7 @@ public final class CaptureService extends Service {
     public static volatile CaptureService instance;
     public static volatile String status="Chưa chia sẻ màn hình";
     public static volatile boolean running=false;
+    public static volatile boolean waiting=false;
     private final Object frames=new Object();
     private Bitmap latest,lastGame;private final AtomicLong sequence=new AtomicLong();
     private MediaProjection projection;private VirtualDisplay display;private ImageReader reader;
@@ -84,11 +85,12 @@ public final class CaptureService extends Service {
     }
     public long sequence(){return sequence.get();}
     public synchronized void startAuto(){
-        if(running||autoThread!=null&&autoThread.isAlive()){status="Chờ lượt cũ kết thúc trước khi chạy lại";return;}
+        if(running)return;
+        if(autoThread!=null&&autoThread.isAlive()){status="Chờ lượt cũ kết thúc trước khi chạy lại";return;}
         if(InputService.instance==null){status="Bật Trợ năng Bric trước";return;}
         running=true;autoThread=new Thread(()->{try{new AutoController(this).run();}finally{running=false;}},"bric-auto");autoThread.start();
     }
-    public static void stopAuto(){running=false;status="Đang dừng Auto";}
+    public static void stopAuto(){running=false;waiting=false;status="Đang dừng Auto";}
     @Override public void onDestroy(){
         if(instance==this){stopAuto();instance=null;}if(autoThread!=null)try{autoThread.join(1800);}catch(InterruptedException ignored){Thread.currentThread().interrupt();}
         if(display!=null)display.release();if(reader!=null)reader.close();if(projection!=null)projection.stop();if(captureThread!=null)captureThread.quitSafely();
