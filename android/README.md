@@ -5,6 +5,12 @@ quyền root khi sử dụng. Không có quyền INTERNET trong manifest.
 
 ## Cài và chạy
 
+Bản 1.0.11 loại các vị trí bóng xám đè lên ô vốn đã có trên bàn. Điều này
+giúp xác định đúng vùng đặt khi hình nổi che một phần bóng ở sát biên.
+Kiểm thử trên ảnh lỗi thật xác định đúng hàng 1, cột 4; các kiểm thử hình
+che bóng, tô lại ô cũ và thiếu ô vẫn đạt. Lượt thật trước đó của 1.0.10
+xác minh bốn nước liên tiếp rồi kẹt ở tình huống biên này.
+
 Bản 1.0.10 loại các ô vốn đã có trên bàn khỏi phép nhận dạng vùng đặt,
 để màu xem trước xóa hàng/cột không bị coi là các ô của khối mới. Ảnh lỗi
 kéo lưu đúng khung mà bộ căn vừa kiểm tra. Bản 1.0.9 đã xác minh một nước

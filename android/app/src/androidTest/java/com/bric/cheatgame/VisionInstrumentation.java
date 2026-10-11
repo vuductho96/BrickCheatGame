@@ -11,9 +11,16 @@ public final class VisionInstrumentation extends Instrumentation {
     private boolean synthetic;
     private String diagnostic;
     private String preview;
-    @Override public void onCreate(Bundle args){super.onCreate(args);synthetic=args!=null&&"true".equals(args.getString("synthetic"));diagnostic=args==null?null:args.getString("frame");preview=args==null?null:args.getString("preview");start();}
+    private boolean boundary;
+    @Override public void onCreate(Bundle args){super.onCreate(args);synthetic=args!=null&&"true".equals(args.getString("synthetic"));diagnostic=args==null?null:args.getString("frame");preview=args==null?null:args.getString("preview");boundary=args!=null&&"true".equals(args.getString("boundary"));start();}
     @Override public void onStart(){Bundle result=new Bundle();int passed=0;
         try{
+            if(boundary){Bitmap baseline=BitmapFactory.decodeStream(getContext().getAssets().open("boundary-baseline-local.png")),drag=BitmapFactory.decodeStream(getContext().getAssets().open("boundary-drag-local.png"));try{
+                Vision.State read=Vision.read(baseline,null);Vision.Piece piece=read.pieces().get(0);PointF point=AutoController.locatePreview(drag,baseline,read.boardRect(),piece);
+                float x=read.boardRect().left+3*read.boardRect().width()/8f,y=read.boardRect().top;
+                if(point==null||Math.abs(point.x-x)>1||Math.abs(point.y-y)>1)throw new AssertionError("Boundary anchor: "+point+" state="+read.signature());
+                result.putString("stream","Top boundary: partial shadow correctly resolves to row 1, col 4\n");finish(-1,result);return;
+            }finally{baseline.recycle();drag.recycle();}}
             if(preview!=null){Bitmap baseline=BitmapFactory.decodeStream(getContext().getAssets().open("diagnostic-local.png")),drag=BitmapFactory.decodeStream(getContext().getAssets().open(preview));try{
                 Vision.State read=Vision.read(baseline,null);PointF point=AutoController.locatePreview(drag,baseline,read.boardRect(),read.pieces().get(0));
                 if(point==null)throw new AssertionError("Grey preview not found");

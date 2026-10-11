@@ -140,7 +140,7 @@ public final class AutoController {
         PointF found=null;
         for(int r=0;r<=8-piece.shape().height;r++)for(int c=0;c<=8-piece.shape().width;c++){
             long mask=piece.shape().mask(r,c);
-            if((grey&~mask)!=0)continue;
+            if((grey&~mask)!=0||(mask&occupied)!=0)continue;
             if(found!=null)return null;
             found=new PointF(board.left+c*cw,board.top+r*ch);
         }
