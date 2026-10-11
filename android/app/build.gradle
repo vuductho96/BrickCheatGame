@@ -2,7 +2,7 @@ plugins { id 'com.android.application' }
 android {
     namespace 'com.bric.cheatgame'
     compileSdk 35
-    defaultConfig { applicationId 'com.bric.cheatgame'; minSdk 33; targetSdk 35; versionCode 4; versionName '1.0.3'; testInstrumentationRunner 'com.bric.cheatgame.VisionInstrumentation' }
+    defaultConfig { applicationId 'com.bric.cheatgame'; minSdk 33; targetSdk 35; versionCode 10; versionName '1.0.9'; testInstrumentationRunner 'com.bric.cheatgame.VisionInstrumentation' }
     compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
     buildTypes { release { minifyEnabled false } }
     testOptions { unitTests.returnDefaultValues = true }

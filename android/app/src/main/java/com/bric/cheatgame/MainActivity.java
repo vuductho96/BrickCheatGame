@@ -52,7 +52,7 @@ public final class MainActivity extends Activity {
         if(result!=RESULT_OK||data==null)return;
         if(request==10){startForegroundService(new Intent(this,CaptureService.class).putExtra("result",result).putExtra("permission",data));}
         if(request==11){try(ZipOutputStream zip=new ZipOutputStream(getContentResolver().openOutputStream(data.getData()))){
-            for(String name:new String[]{"moves.jsonl","mismatch.png","error.png"}){File file=new File(getFilesDir(),name);if(!file.exists())continue;zip.putNextEntry(new ZipEntry(name));try(FileInputStream in=new FileInputStream(file)){in.transferTo(zip);}zip.closeEntry();}
+            for(String name:new String[]{"moves.jsonl","mismatch.png","error.png","drag-unreadable.png"}){File file=new File(getFilesDir(),name);if(!file.exists())continue;zip.putNextEntry(new ZipEntry(name));try(FileInputStream in=new FileInputStream(file)){in.transferTo(zip);}zip.closeEntry();}
             Toast.makeText(this,"Đã lưu log",Toast.LENGTH_SHORT).show();
         }catch(Exception error){Toast.makeText(this,"Không lưu được: "+error.getMessage(),Toast.LENGTH_LONG).show();}}
     }

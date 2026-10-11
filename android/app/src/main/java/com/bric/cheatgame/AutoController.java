@@ -62,7 +62,7 @@ public final class AutoController {
             Bitmap frame=sequence>releaseSequence?service.frame():service.nextFrame(releaseSequence,600);
             try(BitmapHandle h=new BitmapHandle(frame)){
                 if(h.bitmap==null)continue;
-                try{Vision.State read=Vision.read(h.bitmap,calibrated);String signature=read.signature();same=signature.equals(previous)?same+1:1;previous=signature;latest=read;if(same>=3)return latest;}
+                try{long started=SystemClock.elapsedRealtime();Vision.State read=Vision.read(h.bitmap,calibrated);String signature=read.signature();same=signature.equals(previous)?same+1:1;previous=signature;latest=read;readError="Bàn chưa ổn định: "+same+"/3 · đọc "+(SystemClock.elapsedRealtime()-started)+" ms";if(same>=3)return latest;}
                 catch(IllegalArgumentException error){readError=error.getMessage();same=0;previous="";}
             }
             Thread.sleep(180);
@@ -80,7 +80,7 @@ public final class AutoController {
         for(int i=0;i<piece.shape().rows.length;i++){double d=Math.pow(piece.shape().rows[i]+.5-piece.shape().height/2d,2)+Math.pow(piece.shape().cols[i]+.5-piece.shape().width/2d,2);if(d<distance){distance=d;grip=i;}}
         float sx=piece.bounds().left+(piece.shape().cols[grip]+.5f)*piece.bounds().width()/piece.shape().width;
         float sy=piece.bounds().top+(piece.shape().rows[grip]+.5f)*piece.bounds().height()/piece.shape().height;
-        float px=b.centerX(),py=b.bottom-ch*.25f;boolean released=false;
+        float px=b.centerX(),py=b.centerY()+ch*.5f;boolean released=false;
         try(BitmapHandle baseline=new BitmapHandle(service.frame())){
             input.down(sx,sy);long requestedSequence=service.sequence();input.move(px,py,250);
             float targetX=b.left+move.col()*cw,targetY=b.top+move.row()*ch;
@@ -90,10 +90,13 @@ public final class AutoController {
                 try(BitmapHandle fresh=new BitmapHandle(service.nextFrame(requestedSequence,1800))){
                     if(fresh.bitmap==null)throw new IllegalStateException("Không có khung mới khi kéo");
                     requestedSequence=service.sequence();
-                    PointF location=locate(fresh.bitmap,baseline.bitmap,b,piece,targetX,targetY);
-                    if(location==null)throw new IllegalStateException("Không thấy toàn bộ hình đang kéo");
+                    PointF preview=locatePreview(fresh.bitmap,baseline.bitmap,b,piece);
+                    PointF location=preview!=null?preview:locate(fresh.bitmap,baseline.bitmap,b,piece,targetX,targetY);
+                    logAlignment(attempt,px,py,location,preview,targetX,targetY);
+                    if(attempt==0)saveFrame("drag-first.png");
+                    if(location==null){saveFrame("drag-unreadable.png");throw new IllegalStateException("Không thấy toàn bộ hình đang kéo");}
                     float dx=targetX-location.x,dy=targetY-location.y;
-                    if(Math.abs(dx)<cw*.07&&Math.abs(dy)<ch*.07){
+                    if(preview!=null&&Math.abs(dx)<cw*.07&&Math.abs(dy)<ch*.07){
                         if(++matches>=2){releaseSequence=service.sequence();input.up();released=true;return;}
                         // Request a changed screen for the second confirmation;
                         // one pixel remains well inside the alignment tolerance.
@@ -110,6 +113,43 @@ public final class AutoController {
             if(!released&&input.pressed()){try{input.move(sx,sy,250);input.up();}catch(Exception ignored){CaptureService.status="Android đã hủy kéo";}}
         }
     }
+    /** The grey snapped footprint is the game's placement, not the lifted sprite. */
+    static PointF locatePreview(Bitmap frame,Bitmap baseline,Rect board,Vision.Piece piece){
+        float cw=board.width()/8f,ch=board.height()/8f;long grey=0,colored=0;float[] wanted=new float[3],sample=new float[3];Color.colorToHSV(piece.color(),wanted);
+        for(int r=0;r<8;r++)for(int c=0;c<8;c++){
+            int hits=0,colorHits=0;
+            for(float oy:new float[]{.15f,.5f,.85f})for(float ox:new float[]{.15f,.5f,.85f}){
+                int x=Math.round(board.left+(c+ox)*cw),y=Math.round(board.top+(r+oy)*ch);
+                int now=frame.getPixel(x,y),old=baseline.getPixel(x,y);
+                int rr=Color.red(now),gg=Color.green(now),bb=Color.blue(now),max=Math.max(rr,Math.max(gg,bb)),min=Math.min(rr,Math.min(gg,bb));
+                if(max>=80&&max<=190&&max-min<max*.32f&&rr>Color.red(old)+25&&gg>Color.green(old)+25&&bb>Color.blue(old)+25)hits++;
+                Color.colorToHSV(now,sample);float hue=Math.abs(sample[0]-wanted[0]);
+                if(Math.min(hue,360-hue)<17&&sample[1]>.4&&sample[2]>.4&&Math.abs(rr-Color.red(old))+Math.abs(gg-Color.green(old))+Math.abs(bb-Color.blue(old))>100)colorHits++;
+            }
+            if(hits>=2)grey|=1L<<(r*8+c);
+            if(colorHits>=6)colored|=1L<<(r*8+c);
+        }
+        // A lifted piece may completely cover its grey shadow. In that case
+        // require every piece cell to be visible at grid centers, not a partial match.
+        if(Long.bitCount(grey)<Math.max(2,(piece.shape().rows.length+1)/2)){
+            if(Long.bitCount(colored)!=piece.shape().rows.length)return null;
+            grey=colored;
+        }
+        PointF found=null;
+        for(int r=0;r<=8-piece.shape().height;r++)for(int c=0;c<=8-piece.shape().width;c++){
+            long mask=piece.shape().mask(r,c);
+            if((grey&~mask)!=0)continue;
+            if(found!=null)return null;
+            found=new PointF(board.left+c*cw,board.top+r*ch);
+        }
+        return found;
+    }
+    private void logAlignment(int attempt,float px,float py,PointF location,PointF preview,float tx,float ty){
+        try{JSONObject record=new JSONObject().put("time",System.currentTimeMillis()).put("event","alignment").put("attempt",attempt).put("pointerX",px).put("pointerY",py).put("targetX",tx).put("targetY",ty).put("preview",preview!=null);
+            if(location!=null)record.put("observedX",location.x).put("observedY",location.y);
+            try(FileWriter writer=new FileWriter(new File(service.getFilesDir(),"moves.jsonl"),true)){writer.write(record+"\n");}
+        }catch(Exception ignored){}
+    }
     private PointF locate(Bitmap frame,Bitmap baseline,Rect board,Vision.Piece piece,float targetX,float targetY){
         float cw=board.width()/8f,ch=board.height()/8f;int step=Math.max(4,Math.round(cw/8));PointF best=null;double score=0;
         int maxX=board.right-Math.round(piece.shape().width*cw),maxY=board.bottom-Math.round(piece.shape().height*ch);
@@ -124,7 +164,7 @@ public final class AutoController {
         float[] color=new float[3],sample=new float[3],old=new float[3];Color.colorToHSV(piece.color(),color);int all=0,newPixels=0;
         for(int i=0;i<piece.shape().rows.length;i++){
             int matches=0;
-            for(float dy:new float[]{.25f,.75f})for(float dx:new float[]{.25f,.75f}){
+            for(float dy:new float[]{.12f,.88f})for(float dx:new float[]{.12f,.88f}){
                 int xx=Math.round(x+(piece.shape().cols[i]+dx)*cw),yy=Math.round(y+(piece.shape().rows[i]+dy)*ch);
                 if(xx<0||yy<0||xx>=frame.getWidth()||yy>=frame.getHeight())return 0;
                 Color.colorToHSV(frame.getPixel(xx,yy),sample);float delta=Math.abs(sample[0]-color[0]);delta=Math.min(delta,360-delta);

@@ -24,6 +24,7 @@ public final class CaptureService extends Service {
     private MediaProjection projection;private VirtualDisplay display;private ImageReader reader;
     private HandlerThread captureThread;private Thread autoThread;
     private long lastImageAt,lastBoardCheck;
+    private final com.bric.cheatgame.core.FrameSchedule frameSchedule=new com.bric.cheatgame.core.FrameSchedule();
     private String closeReason="Đã tắt chia sẻ màn hình";
     @Override public IBinder onBind(Intent intent){return null;}
     @Override public int onStartCommand(Intent intent,int flags,int id){
@@ -43,15 +44,21 @@ public final class CaptureService extends Service {
             DisplayMetrics metrics=new DisplayMetrics();((WindowManager)getSystemService(WINDOW_SERVICE)).getDefaultDisplay().getRealMetrics(metrics);
             reader=ImageReader.newInstance(metrics.widthPixels,metrics.heightPixels,PixelFormat.RGBA_8888,3);
             reader.setOnImageAvailableListener(source->{
+                long delay=frameSchedule.schedule(SystemClock.elapsedRealtime());if(delay<0)return;
+                handler.postDelayed(()->{
+                frameSchedule.begin(SystemClock.elapsedRealtime());
                 try(Image image=source.acquireLatestImage()){
-                    if(image==null||SystemClock.elapsedRealtime()-lastImageAt<85)return;lastImageAt=SystemClock.elapsedRealtime();
+                    if(image==null)return;lastImageAt=SystemClock.elapsedRealtime();
                     Image.Plane plane=image.getPlanes()[0];ByteBuffer buffer=plane.getBuffer();int padding=plane.getRowStride()/plane.getPixelStride()-image.getWidth();
                     Bitmap padded=Bitmap.createBitmap(image.getWidth()+padding,image.getHeight(),Bitmap.Config.ARGB_8888);padded.copyPixelsFromBuffer(buffer);
                     Bitmap frame=Bitmap.createBitmap(padded,0,0,image.getWidth(),image.getHeight());if(frame!=padded)padded.recycle();
                     boolean game=false;
-                    if(lastImageAt-lastBoardCheck>=1000){lastBoardCheck=lastImageAt;try{Vision.findBoard(frame);game=true;}catch(IllegalArgumentException ignored){}}
+                    // Board recognition must not hold up capture while a finger moves.
+                    if(running)game=true;
+                    else if(lastImageAt-lastBoardCheck>=1000){lastBoardCheck=lastImageAt;try{Vision.findBoard(frame);game=true;}catch(IllegalArgumentException ignored){}}
                     synchronized(frames){if(latest!=null)latest.recycle();latest=frame;if(game){if(lastGame!=null)lastGame.recycle();lastGame=frame.copy(Bitmap.Config.ARGB_8888,false);}sequence.incrementAndGet();frames.notifyAll();}
                 }catch(Exception failure){status="Lỗi khung hình: "+failure.getMessage();}
+                },delay);
             },handler);
             display=projection.createVirtualDisplay("BricScreen",metrics.widthPixels,metrics.heightPixels,metrics.densityDpi,DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,reader.getSurface(),null,handler);
             instance=this;status="Đã nhận màn hình. Mở game rồi bật Auto.";

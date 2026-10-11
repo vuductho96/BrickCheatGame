@@ -19,7 +19,7 @@ public final class InputService extends AccessibilityService {
     @Override public void onDestroy(){if(instance==this){instance=null;CaptureService.stopAuto();}super.onDestroy();}
     public boolean pressed(){return held!=null;}
     public void down(float sx,float sy)throws Exception{if(held!=null)throw new IllegalStateException("Finger already down");send(sx,sy,100,true,true);}
-    public void move(float sx,float sy,long duration)throws Exception{if(held==null)throw new IllegalStateException("No finger");send(sx,sy,duration,true,false);}
+    public void move(float sx,float sy,long duration)throws Exception{if(held==null)throw new IllegalStateException("No finger");send(sx,sy,duration,true,false);Thread.sleep(220);}
     public void up()throws Exception{if(held!=null)send(x,y,60,false,false);}
     private void send(float sx,float sy,long duration,boolean continuing,boolean first)throws Exception{
         CountDownLatch complete=new CountDownLatch(1);boolean[] success={false};

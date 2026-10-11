@@ -5,6 +5,31 @@ quyền root khi sử dụng. Không có quyền INTERNET trong manifest.
 
 ## Cài và chạy
 
+Bản 1.0.9 bổ sung xác nhận hình che bóng xám: phải có đủ mọi ô mới của
+khối ở tâm lưới, không chấp nhận chỉ một phần hình. Luồng capture không
+tìm viền trong lúc Auto kéo; mỗi chuyển động chờ 220 ms để ảnh theo kịp.
+Trước đó bản 1.0.8 đã xác minh một nước thật, nhưng còn kẹt với khối 3×3
+che bóng. Khi kiểm tra Auto không chạy `uiautomator dump`: công cụ đó có
+thể tạm ngắt các dịch vụ Trợ năng và hủy cử chỉ đang giữ.
+
+Bản 1.0.7 căn theo vùng xám mà game đã bắt vào lưới, thay vì coi vị trí
+hình màu nổi là ô sẽ nhận. Chỉ nhả khi tìm được duy nhất vùng xám khớp
+hình và trùng đích hai lần; không nhả chỉ vì hình màu trông đã gần đích.
+Kiểm thử trên ảnh lỗi S23+ xác định đúng hàng 3, cột 7 dù hình màu bị cắt
+ở mép màn hình. Log `alignment` lưu vị trí tay, đích và vùng quan sát.
+
+Bản 1.0.6 đọc pixel vào bộ nhớ một lần, kiểm tra màu viền và khay bằng RGB
+thay cho gọi Bitmap/HSV từng pixel. Trên S23+, ảnh bàn thật được đọc đúng
+ma trận và ba khối trong 526 ms; hai fixture tổng hợp cũng đạt. Trạng thái
+chờ bàn ghi số lần đọc ổn định và thời gian đọc, thay vì báo sai “Chưa có ảnh”.
+Xuất log kèm `drag-unreadable.png` khi không tìm được hình đang kéo.
+
+Bản 1.0.5 giữ ảnh cuối trong đợt cập nhật: chờ thời điểm đọc thay vì lấy
+ảnh ra rồi bỏ qua trong khoảng giới hạn tốc độ. Có 3 kiểm thử lịch đọc
+ảnh, ngoài 9 kiểm thử solver. Đưa khối vào giữa bàn trước khi căn, lưu
+`drag-unreadable.png` nếu không theo dõi được khối trong lúc kéo. Kết quả
+kiểm thử chưa chứng minh kéo trong game thật đã thành công.
+
 Bản 1.0.3 phục hồi tham chiếu dịch vụ Trợ năng theo vòng đời Android,
 không để dịch vụ cũ xóa trạng thái của dịch vụ mới. Hiệu chỉnh không
 vuông được bỏ qua để dùng viền bàn tự tìm. Chưa có lượt kéo thật xác

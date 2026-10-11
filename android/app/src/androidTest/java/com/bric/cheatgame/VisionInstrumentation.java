@@ -10,10 +10,26 @@ import java.io.*;
 public final class VisionInstrumentation extends Instrumentation {
     private boolean synthetic;
     private String diagnostic;
-    @Override public void onCreate(Bundle args){super.onCreate(args);synthetic=args!=null&&"true".equals(args.getString("synthetic"));diagnostic=args==null?null:args.getString("frame");start();}
+    private String preview;
+    @Override public void onCreate(Bundle args){super.onCreate(args);synthetic=args!=null&&"true".equals(args.getString("synthetic"));diagnostic=args==null?null:args.getString("frame");preview=args==null?null:args.getString("preview");start();}
     @Override public void onStart(){Bundle result=new Bundle();int passed=0;
         try{
-            if(diagnostic!=null){Bitmap image=BitmapFactory.decodeStream(getContext().getAssets().open(diagnostic));try{Vision.State read=Vision.read(image,null);result.putString("stream","Diagnostic: "+read.signature()+" board="+read.boardRect()+"\n");finish(-1,result);return;}finally{image.recycle();}}
+            if(preview!=null){Bitmap baseline=BitmapFactory.decodeStream(getContext().getAssets().open("diagnostic-local.png")),drag=BitmapFactory.decodeStream(getContext().getAssets().open(preview));try{
+                Vision.State read=Vision.read(baseline,null);PointF point=AutoController.locatePreview(drag,baseline,read.boardRect(),read.pieces().get(0));
+                if(point==null)throw new AssertionError("Grey preview not found");
+                float x=read.boardRect().left+6*read.boardRect().width()/8f,y=read.boardRect().top+2*read.boardRect().height()/8f;
+                if(Math.abs(point.x-x)>1||Math.abs(point.y-y)>1)throw new AssertionError("Wrong grey anchor: "+point);
+                Bitmap covered=baseline.copy(Bitmap.Config.ARGB_8888,true);try{
+                    Vision.Piece square=read.pieces().get(2);Rect b=read.boardRect();float cw=b.width()/8f,ch=b.height()/8f;Canvas canvas=new Canvas(covered);Paint paint=new Paint();paint.setColor(square.color());
+                    for(int r=0;r<3;r++)for(int c=0;c<3;c++)canvas.drawRect(b.left+c*cw+1,b.top+(r+4)*ch+1,b.left+(c+1)*cw-1,b.top+(r+5)*ch-1,paint);
+                    PointF full=AutoController.locatePreview(covered,baseline,b,square);
+                    if(full==null||Math.abs(full.x-b.left)>1||Math.abs(full.y-(b.top+4*ch))>1)throw new AssertionError("Covered 3x3 footprint");
+                    paint.setColor(baseline.getPixel(Math.round(b.left+.5f*cw),Math.round(b.top+4.5f*ch)));canvas.drawRect(b.left,b.top+4*ch,b.left+cw,b.top+5*ch,paint);
+                    if(AutoController.locatePreview(covered,baseline,b,square)!=null)throw new AssertionError("Incomplete square accepted");
+                }finally{covered.recycle();}
+                result.putString("stream","Placement: grey anchor correct; fully covered 3x3 accepted; incomplete shape rejected\n");finish(-1,result);return;
+            }finally{baseline.recycle();drag.recycle();}}
+            if(diagnostic!=null){Bitmap image=BitmapFactory.decodeStream(getContext().getAssets().open(diagnostic));try{long started=android.os.SystemClock.elapsedRealtime();Vision.State read=Vision.read(image,null);result.putString("stream","Diagnostic: "+read.signature()+" board="+read.boardRect()+" read_ms="+(android.os.SystemClock.elapsedRealtime()-started)+"\n");finish(-1,result);return;}finally{image.recycle();}}
             JSONArray fixtures=new JSONArray(new String(getContext().getAssets().open("fixtures/cases.json").readAllBytes(),java.nio.charset.StandardCharsets.UTF_8));
             for(int i=0;i<fixtures.length();i++){
                 JSONObject item=fixtures.getJSONObject(i);Bitmap frame;
