@@ -5,6 +5,11 @@ quyền root khi sử dụng. Không có quyền INTERNET trong manifest.
 
 ## Cài và chạy
 
+Bản 1.0.10 loại các ô vốn đã có trên bàn khỏi phép nhận dạng vùng đặt,
+để màu xem trước xóa hàng/cột không bị coi là các ô của khối mới. Ảnh lỗi
+kéo lưu đúng khung mà bộ căn vừa kiểm tra. Bản 1.0.9 đã xác minh một nước
+trong ván thật nhưng dừng ở nước có hiệu ứng tô lại ô cũ.
+
 Bản 1.0.9 bổ sung xác nhận hình che bóng xám: phải có đủ mọi ô mới của
 khối ở tâm lưới, không chấp nhận chỉ một phần hình. Luồng capture không
 tìm viền trong lúc Auto kéo; mỗi chuyển động chờ 220 ms để ảnh theo kịp.

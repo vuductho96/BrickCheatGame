@@ -90,11 +90,11 @@ public final class AutoController {
                 try(BitmapHandle fresh=new BitmapHandle(service.nextFrame(requestedSequence,1800))){
                     if(fresh.bitmap==null)throw new IllegalStateException("Không có khung mới khi kéo");
                     requestedSequence=service.sequence();
+                    if(attempt==0)saveBitmap(fresh.bitmap,"drag-first.png");
                     PointF preview=locatePreview(fresh.bitmap,baseline.bitmap,b,piece);
                     PointF location=preview!=null?preview:locate(fresh.bitmap,baseline.bitmap,b,piece,targetX,targetY);
                     logAlignment(attempt,px,py,location,preview,targetX,targetY);
-                    if(attempt==0)saveFrame("drag-first.png");
-                    if(location==null){saveFrame("drag-unreadable.png");throw new IllegalStateException("Không thấy toàn bộ hình đang kéo");}
+                    if(location==null){saveBitmap(fresh.bitmap,"drag-unreadable.png");throw new IllegalStateException("Không thấy toàn bộ hình đang kéo");}
                     float dx=targetX-location.x,dy=targetY-location.y;
                     if(preview!=null&&Math.abs(dx)<cw*.07&&Math.abs(dy)<ch*.07){
                         if(++matches>=2){releaseSequence=service.sequence();input.up();released=true;return;}
@@ -129,6 +129,8 @@ public final class AutoController {
             if(hits>=2)grey|=1L<<(r*8+c);
             if(colorHits>=6)colored|=1L<<(r*8+c);
         }
+        long occupied=Vision.readBoard(baseline,board);grey&=~occupied;colored&=~occupied;
+        // Existing cells may be recolored to preview a clearing row/column.
         // A lifted piece may completely cover its grey shadow. In that case
         // require every piece cell to be visible at grid centers, not a partial match.
         if(Long.bitCount(grey)<Math.max(2,(piece.shape().rows.length+1)/2)){
@@ -193,5 +195,6 @@ public final class AutoController {
         }catch(Exception ignored){}
     }
     private void saveFrame(String name){try(BitmapHandle h=new BitmapHandle(service.frame())){if(h.bitmap!=null)try(FileOutputStream stream=service.openFileOutput(name,0)){h.bitmap.compress(Bitmap.CompressFormat.PNG,100,stream);}}catch(Exception ignored){}}
+    private void saveBitmap(Bitmap bitmap,String name){try(FileOutputStream stream=service.openFileOutput(name,0)){bitmap.compress(Bitmap.CompressFormat.PNG,100,stream);}catch(Exception ignored){}}
     private static final class BitmapHandle implements AutoCloseable {final Bitmap bitmap;BitmapHandle(Bitmap bitmap){this.bitmap=bitmap;}public void close(){if(bitmap!=null)bitmap.recycle();}}
 }

@@ -24,10 +24,13 @@ public final class VisionInstrumentation extends Instrumentation {
                     for(int r=0;r<3;r++)for(int c=0;c<3;c++)canvas.drawRect(b.left+c*cw+1,b.top+(r+4)*ch+1,b.left+(c+1)*cw-1,b.top+(r+5)*ch-1,paint);
                     PointF full=AutoController.locatePreview(covered,baseline,b,square);
                     if(full==null||Math.abs(full.x-b.left)>1||Math.abs(full.y-(b.top+4*ch))>1)throw new AssertionError("Covered 3x3 footprint");
+                    for(int r=0;r<8;r++)for(int c=0;c<8;c++)if((read.board()&(1L<<(r*8+c)))!=0)canvas.drawRect(b.left+c*cw,b.top+r*ch,b.left+(c+1)*cw,b.top+(r+1)*ch,paint);
+                    PointF recolored=AutoController.locatePreview(covered,baseline,b,square);
+                    if(recolored==null||Math.abs(recolored.x-b.left)>1||Math.abs(recolored.y-(b.top+4*ch))>1)throw new AssertionError("Recolored existing cells confused placement");
                     paint.setColor(baseline.getPixel(Math.round(b.left+.5f*cw),Math.round(b.top+4.5f*ch)));canvas.drawRect(b.left,b.top+4*ch,b.left+cw,b.top+5*ch,paint);
                     if(AutoController.locatePreview(covered,baseline,b,square)!=null)throw new AssertionError("Incomplete square accepted");
                 }finally{covered.recycle();}
-                result.putString("stream","Placement: grey anchor correct; fully covered 3x3 accepted; incomplete shape rejected\n");finish(-1,result);return;
+                result.putString("stream","Placement: grey anchor correct; covered 3x3 accepted; old recolored cells excluded; incomplete shape rejected\n");finish(-1,result);return;
             }finally{baseline.recycle();drag.recycle();}}
             if(diagnostic!=null){Bitmap image=BitmapFactory.decodeStream(getContext().getAssets().open(diagnostic));try{long started=android.os.SystemClock.elapsedRealtime();Vision.State read=Vision.read(image,null);result.putString("stream","Diagnostic: "+read.signature()+" board="+read.boardRect()+" read_ms="+(android.os.SystemClock.elapsedRealtime()-started)+"\n");finish(-1,result);return;}finally{image.recycle();}}
             JSONArray fixtures=new JSONArray(new String(getContext().getAssets().open("fixtures/cases.json").readAllBytes(),java.nio.charset.StandardCharsets.UTF_8));
