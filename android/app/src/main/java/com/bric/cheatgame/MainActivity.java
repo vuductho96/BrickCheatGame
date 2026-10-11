@@ -5,7 +5,6 @@ import android.app.*;
 import android.content.*;
 import android.graphics.*;
 import android.media.projection.MediaProjectionManager;
-import android.media.projection.MediaProjectionConfig;
 import android.os.*;
 import android.provider.Settings;
 import android.view.*;
@@ -24,13 +23,7 @@ public final class MainActivity extends Activity {
         layout.addView(text("Chạy trên máy · nhận hình mới · không cần PC",15));
         status=text("",16);status.setPadding(0,dp(20),0,dp(20));layout.addView(status);
         button(layout,"1. Bật Trợ năng Bric",()->startActivity(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)));
-        button(layout,"2. Chia sẻ toàn bộ màn hình",()->{
-            if(CaptureService.instance!=null){Toast.makeText(this,"Đã nhận màn hình",Toast.LENGTH_SHORT).show();return;}
-            if(Build.VERSION.SDK_INT>=33)requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS},9);
-            MediaProjectionManager manager=getSystemService(MediaProjectionManager.class);
-            Intent request=Build.VERSION.SDK_INT>=34?manager.createScreenCaptureIntent(MediaProjectionConfig.createConfigForDefaultDisplay()):manager.createScreenCaptureIntent();
-            startActivityForResult(request,10);
-        });
+        button(layout,"2. Chia sẻ ứng dụng / màn hình",this::requestCapture);
         auto=button(layout,"Chạy Auto trên điện thoại",()->{
             if(CaptureService.running){CaptureService.stopAuto();return;}
             if(CaptureService.instance==null){Toast.makeText(this,"Chia sẻ màn hình trước",Toast.LENGTH_LONG).show();return;}
@@ -40,7 +33,15 @@ public final class MainActivity extends Activity {
         button(layout,"Hiệu chỉnh / xem bàn",this::calibrate);
         button(layout,"Lưu log để sửa lỗi",()->startActivityForResult(new Intent(Intent.ACTION_CREATE_DOCUMENT).setType("application/zip").putExtra(Intent.EXTRA_TITLE,"bric-debug.zip"),11));
         button(layout,"Tắt chụp màn hình",()->{if(CaptureService.instance!=null)startService(new Intent(this,CaptureService.class).setAction("CLOSE"));});
-        layout.addView(text("Mở ván game trước, quay lại Bric rồi chạy Auto. Khi cấp quyền hãy chọn toàn bộ màn hình. Có thể dừng Auto từ thông báo bất cứ lúc nào.\n\nHình mới được đọc theo các ô, không cần tên hình. Kịch bản tương lai là giả định; không bảo đảm điểm hoặc thắng. App không bấm hồi sinh, mua vật phẩm hay tự mở ván mới.",14));
+        layout.addView(text("Mở ván game trước, quay lại Bric rồi chạy Auto. Khi cấp quyền có thể chọn một ứng dụng (Shopee) hoặc toàn bộ màn hình. Có thể dừng Auto từ thông báo bất cứ lúc nào.\n\nHình mới được đọc theo các ô, không cần tên hình. Kịch bản tương lai là giả định; không bảo đảm điểm hoặc thắng. App không bấm hồi sinh, mua vật phẩm hay tự mở ván mới.",14));
+        if(getIntent().getBooleanExtra("open_capture",false))handler.post(this::requestCapture);
+    }
+    private void requestCapture(){
+            if(CaptureService.instance!=null){Toast.makeText(this,"Đã nhận màn hình",Toast.LENGTH_SHORT).show();return;}
+            if(Build.VERSION.SDK_INT>=33)requestPermissions(new String[]{Manifest.permission.POST_NOTIFICATIONS},9);
+            MediaProjectionManager manager=getSystemService(MediaProjectionManager.class);
+            Intent request=manager.createScreenCaptureIntent();
+            startActivityForResult(request,10);
     }
     private TextView text(String value,int size){TextView t=new TextView(this);t.setText(value);t.setTextSize(size);t.setTextColor(Color.rgb(12,48,57));t.setPadding(0,dp(8),0,dp(8));return t;}
     private Button button(LinearLayout parent,String label,Runnable action){Button b=new Button(this);b.setText(label);b.setAllCaps(false);parent.addView(b,new LinearLayout.LayoutParams(-1,dp(60)));b.setOnClickListener(v->action.run());return b;}
